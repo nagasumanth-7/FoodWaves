@@ -1,0 +1,126 @@
+{% extends "restaurant/base.html" %}
+{% load static %}
+
+{% block title %}Access Restricted | Food Waves{% endblock %}
+
+{% block head %}
+<style>
+  .forbidden-page {
+    min-height: calc(100vh - 170px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 130px 24px 90px;
+    background: radial-gradient(circle at 50% 30%, rgba(239, 68, 68, 0.12), transparent 55%),
+                linear-gradient(180deg, #030813 0%, #061124 100%);
+    color: var(--text-primary);
+    text-align: center;
+  }
+  .forbidden-card {
+    max-width: 560px;
+    width: 100%;
+    background: rgba(13, 27, 42, 0.9);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    border-radius: var(--radius-lg);
+    padding: 48px 36px;
+    backdrop-filter: blur(24px);
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6), 0 0 40px rgba(239, 68, 68, 0.1);
+  }
+  .forbidden-icon {
+    font-size: 52px;
+    margin-bottom: 16px;
+    display: inline-block;
+    filter: drop-shadow(0 0 20px rgba(239, 68, 68, 0.4));
+  }
+  .forbidden-badge {
+    display: inline-block;
+    padding: 6px 14px;
+    border-radius: 20px;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.35);
+    color: #f87171;
+    font: 700 12px var(--mono);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .forbidden-card h1 {
+    font-size: 30px;
+    font-weight: 800;
+    margin: 0 0 14px;
+    color: #ffffff;
+    letter-spacing: -0.02em;
+  }
+  .forbidden-card p {
+    color: var(--text-muted);
+    font-size: 15px;
+    line-height: 1.6;
+    margin-bottom: 30px;
+  }
+  .role-indicator {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    margin-bottom: 28px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .action-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="forbidden-page">
+  <div class="forbidden-card">
+    <div class="forbidden-icon">🛡️</div>
+    <div>
+      <span class="forbidden-badge">HTTP 403 • RESTRICTED ACCESS</span>
+    </div>
+    <h1>Restricted Staff Interface</h1>
+    <p>
+      Your account does not have authorization to view this section.
+      Staff interfaces are strictly segregated to maintain floor security, operational integrity, and role accountability.
+    </p>
+
+    {% if user.is_authenticated %}
+      <div class="role-indicator">
+        Logged in as: <b>{{ user.email }}</b>
+        {% if user_portal_name %}
+          <div style="margin-top: 4px; color: var(--gold-light);">
+            Assigned Role Interface: <b>{{ user_portal_name }}</b>
+          </div>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    <div class="action-buttons">
+      {% if user_portal_url %}
+        <a href="{{ user_portal_url }}" class="button button-gold">
+          Return to {{ user_portal_name }} →
+        </a>
+      {% else %}
+        <a href="{% url 'restaurant:home' %}" class="button button-gold">
+          Return to Dining Home →
+        </a>
+      {% endif %}
+
+      {% if user.is_authenticated %}
+        <a href="{% url 'restaurant:logout' %}" class="button button-outline">
+          Log Out
+        </a>
+      {% else %}
+        <a href="{% url 'restaurant:login' %}" class="button button-outline">
+          Log In
+        </a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+

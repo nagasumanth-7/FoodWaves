@@ -1,0 +1,206 @@
+{% extends "restaurant/base.html" %}
+{% load static %}
+
+{% block title %}Menu Categories | Manager Portal{% endblock %}
+
+{% block head %}
+<style>
+  .manager-shell {
+    min-height: calc(100vh - 170px);
+    padding: 140px max(6vw, 24px) 90px;
+    background: 
+      radial-gradient(circle at 85% 15%, rgba(6, 182, 212, 0.12), transparent 45%),
+      linear-gradient(180deg, #030813 0%, #061124 50%, #08162b 100%);
+    color: var(--text-primary);
+  }
+
+  .manager-container {
+    max-width: 1200px;
+    margin: auto;
+  }
+
+  .portal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 24px;
+    flex-wrap: wrap;
+    margin-bottom: 36px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border-glass);
+  }
+
+  .portal-header h1 {
+    margin: 8px 0 0;
+    font-size: clamp(32px, 4vw, 44px);
+    font-weight: 800;
+    color: #ffffff;
+  }
+
+  .portal-nav {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .table-card {
+    background: rgba(9, 23, 44, 0.75);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    backdrop-filter: blur(16px);
+    overflow: hidden;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 14px;
+  }
+
+  .data-table th {
+    padding: 16px 20px;
+    color: var(--text-muted);
+    font: 600 11px var(--mono);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border-glass);
+    background: rgba(3, 8, 19, 0.4);
+  }
+
+  .data-table td {
+    padding: 18px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+  }
+
+  .data-table tr:hover td {
+    background: rgba(6, 182, 212, 0.04);
+  }
+
+  .badge-active {
+    background: rgba(52, 211, 153, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(52, 211, 153, 0.3);
+    padding: 4px 10px;
+    border-radius: 12px;
+    font: 700 11px var(--mono);
+    text-transform: uppercase;
+  }
+
+  .badge-inactive {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    padding: 4px 10px;
+    border-radius: 12px;
+    font: 700 11px var(--mono);
+    text-transform: uppercase;
+  }
+
+  .action-links {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .btn-action-edit {
+    color: var(--cyan);
+    text-decoration: none;
+    font-weight: 600;
+  }
+
+  .btn-action-edit:hover {
+    text-decoration: underline;
+  }
+
+  .btn-toggle {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-weight: 600;
+    padding: 0;
+  }
+
+  .btn-toggle:hover {
+    color: #ffffff;
+    text-decoration: underline;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="manager-shell">
+  <div class="manager-container">
+    <div class="portal-header">
+      <div>
+        <p class="eyebrow">MENU ARCHITECTURE <span>• MANAGER PORTAL</span></p>
+        <h1>Menu Categories</h1>
+      </div>
+
+      <div class="portal-nav">
+        <a class="button button-gold" href="{% url 'restaurant:manager_category_add' %}">+ Add New Category</a>
+        <a class="button button-outline" href="{% url 'restaurant:manager_menu_list' %}">Manage Menu Items →</a>
+        <a class="button button-outline" href="{% url 'restaurant:manager_dashboard' %}">Dashboard</a>
+      </div>
+    </div>
+
+    <div class="table-card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Category Name</th>
+            <th>Description</th>
+            <th>Total Dishes</th>
+            <th>Status</th>
+            <th style="text-align: right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for cat in categories %}
+            <tr>
+              <td>
+                <b style="font-size: 15px; color: #ffffff;">{{ cat.name }}</b>
+              </td>
+              <td style="color: var(--text-muted); max-width: 380px;">
+                {{ cat.description|default:"—" }}
+              </td>
+              <td>
+                <span style="font: 700 13px var(--mono); color: var(--gold-light);">{{ cat.item_count }}</span> dishes
+              </td>
+              <td>
+                {% if cat.is_active %}
+                  <span class="badge-active">Active</span>
+                {% else %}
+                  <span class="badge-inactive">Deactivated</span>
+                {% endif %}
+              </td>
+              <td style="text-align: right;">
+                <div class="action-links" style="justify-content: flex-end;">
+                  <a href="{% url 'restaurant:manager_category_edit' category_id=cat.id %}" class="btn-action-edit">Edit</a>
+                  
+                  <form method="post" action="{% url 'restaurant:manager_category_toggle' category_id=cat.id %}" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" class="btn-toggle">
+                      {% if cat.is_active %}Deactivate{% else %}Activate{% endif %}
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                No categories found. Click "+ Add New Category" to create one.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endblock %}
+

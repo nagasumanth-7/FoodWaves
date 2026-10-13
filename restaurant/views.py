@@ -13,6 +13,9 @@ from django.urls import reverse
 from django.utils import timezone
 from django.http import JsonResponse, HttpResponseForbidden
 
+from django.contrib.auth.models import Group
+from django.db.models import Q, Count
+
 from .models import (
     UserProfile,
     Reservation,
@@ -29,6 +32,7 @@ from .forms import (
     SignUpForm,
     LoginForm,
     ReservationForm,
+    MenuCategoryForm,
     MenuItemForm,
     ChefAvailabilityForm,
     TableOpenForm,
@@ -51,6 +55,7 @@ from .services.menu_service import (
 from .services.order_service import (
     validate_cart_items,
     create_order_for_session,
+    create_customer_order,
     update_order_item_status,
     get_kitchen_active_orders,
     get_pending_serves_for_waiter,
@@ -58,13 +63,16 @@ from .services.order_service import (
 from .services.table_service import (
     get_all_tables,
     get_table_by_id,
+    get_table_by_qr_token,
     get_active_session_for_table,
+    get_or_create_active_session,
     open_table_session,
     close_table_session,
     set_table_bill_pending,
 )
 from .services.billing_service import (
     calculate_and_generate_bill,
+    request_bill_from_customer,
     process_bill_payment,
     get_unpaid_bills,
     get_daily_cashier_summary,
@@ -327,9 +335,56 @@ def auth_callback(request):
     return redirect("restaurant:login")
 
 
+def get_user_home_url(user, next_url=None):
+    """
+    Returns the dedicated interface URL for a user based strictly on their assigned role:
+    - WAITER -> /waiter/ (only allowed to proceed to next_url if next_url starts with /waiter/)
+    - CHEF -> /chef/dashboard/ or /chef/kds/ (only allowed to proceed to next_url if next_url starts with /chef/)
+    - CASHIER -> /cashier/ (only allowed to proceed to next_url if next_url starts with /cashier/)
+    - MANAGER -> /manager/ (only allowed to proceed to next_url if next_url starts with /manager/)
+    - ADMIN / SUPERUSER -> /manager/ (or valid next_url)
+    - Regular Customer -> /reserve/ (or customer-facing next_url)
+    Never redirects a staff member to another staff member's interface or to customer pages by mistake.
+    """
+    if not user.is_authenticated:
+        return reverse("restaurant:home")
+
+    if user.is_superuser or user.groups.filter(name="ADMIN").exists():
+        if next_url and next_url.startswith("/") and not next_url.startswith("/login"):
+            return next_url
+        return reverse("restaurant:manager_dashboard")
+
+    if user.groups.filter(name="WAITER").exists():
+        if next_url and next_url.startswith("/waiter/"):
+            return next_url
+        return reverse("restaurant:waiter_dashboard")
+
+    if user.groups.filter(name="CHEF").exists():
+        if next_url and next_url.startswith("/chef/"):
+            return next_url
+        return reverse("restaurant:chef_dashboard")
+
+    if user.groups.filter(name="CASHIER").exists():
+        if next_url and next_url.startswith("/cashier/"):
+            return next_url
+        return reverse("restaurant:cashier_dashboard")
+
+    if user.groups.filter(name="MANAGER").exists():
+        if next_url and next_url.startswith("/manager/"):
+            return next_url
+        return reverse("restaurant:manager_dashboard")
+
+    # Regular Customer (no staff group)
+    if next_url and next_url.startswith("/") and not any(
+        next_url.startswith(p) for p in ["/manager/", "/chef/", "/waiter/", "/cashier/", "/admin/", "/login"]
+    ):
+        return next_url
+    return reverse("restaurant:reservation")
+
+
 def login_page(request):
     if request.user.is_authenticated:
-        return redirect("restaurant:reservation")
+        return redirect(get_user_home_url(request.user))
 
     next_url = request.GET.get("next") or request.POST.get("next") or ""
     unverified_email = None
@@ -341,7 +396,7 @@ def login_page(request):
             password = form.cleaned_data["password"]
             remember_me = form.cleaned_data.get("remember_me", True)
 
-            # Direct authentication for Staff, Managers, Chefs, and Superusers
+            # Direct authentication for Staff, Managers, Chefs, Waiters, Cashiers, and Superusers
             local_user = (
                 User.objects.filter(email__iexact=email).first()
                 or User.objects.filter(username__iexact=email).first()
@@ -360,17 +415,7 @@ def login_page(request):
                 if not remember_me:
                     request.session.set_expiry(0)
                 messages.success(request, f"Welcome back, {local_user.first_name or local_user.username}!")
-                if next_url and next_url.startswith("/"):
-                    return redirect(next_url)
-                if local_user.groups.filter(name="MANAGER").exists() or local_user.is_superuser:
-                    return redirect("restaurant:manager_dashboard")
-                elif local_user.groups.filter(name="CHEF").exists():
-                    return redirect("restaurant:chef_dashboard")
-                elif local_user.groups.filter(name="WAITER").exists():
-                    return redirect("restaurant:waiter_dashboard")
-                elif local_user.groups.filter(name="CASHIER").exists():
-                    return redirect("restaurant:cashier_dashboard")
-                return redirect("restaurant:reservation")
+                return redirect(get_user_home_url(local_user, next_url=next_url))
 
             # Supabase Auth Authentication
             if getattr(settings, "SUPABASE_ANON_KEY", None):
@@ -424,9 +469,7 @@ def login_page(request):
                     request.session.set_expiry(0)
 
                 messages.success(request, f"Welcome back, {django_user.first_name or django_user.email}!")
-                if next_url and next_url.startswith("/"):
-                    return redirect(next_url)
-                return redirect("restaurant:reservation")
+                return redirect(get_user_home_url(django_user, next_url=next_url))
 
             else:
                 # Fallback to local Django authentication
@@ -449,9 +492,7 @@ def login_page(request):
                     if not remember_me:
                         request.session.set_expiry(0)
                     messages.success(request, f"Welcome back, {user.first_name or user.email}!")
-                    if next_url and next_url.startswith("/"):
-                        return redirect(next_url)
-                    return redirect("restaurant:reservation")
+                    return redirect(get_user_home_url(user, next_url=next_url))
                 else:
                     messages.error(request, "Invalid email or password. Please try again.")
     else:
@@ -466,9 +507,16 @@ def login_page(request):
 
 def logout_view(request):
     logout(request)
-    request.session.pop("supabase_token", None)
+    request.session.flush()
     messages.info(request, "You have been logged out successfully.")
     return redirect("restaurant:home")
+
+
+def custom_permission_denied_view(request, exception=None):
+    """
+    Renders custom 403 forbidden page explaining staff interface isolation.
+    """
+    return render(request, "403.html", {"exception": exception}, status=403)
 
 
 # ==============================================================================
@@ -989,7 +1037,7 @@ def waiter_request_bill(request, table_id):
         return redirect("restaurant:waiter_table_detail", table_id=table.id)
 
     try:
-        bill = calculate_and_generate_bill(session)
+        bill = calculate_and_generate_bill(session, bill_status="REQUESTED")
         set_table_bill_pending(table.id)
         messages.success(request, f"Bill generated for Table {table.table_number} (₹{bill.total}). Sent to cashier for checkout.")
     except Exception as e:
@@ -1184,4 +1232,393 @@ def chef_item_status(request, item_id):
         except Exception as e:
             messages.error(request, str(e))
     return redirect("restaurant:chef_kds")
+
+
+# ==============================================================================
+# CUSTOMER QR CODE ORDERING & TABLE SESSIONS (Sections 2, 10, 14-16, 18)
+# ==============================================================================
+
+def table_menu(request, qr_token):
+    """
+    Customer QR Table Menu View (Sections 2, 10, 14):
+    Resolves table by qr_token, retrieves or starts active table session,
+    and displays categories and items with live availability.
+    """
+    table = get_table_by_qr_token(qr_token)
+    if table.status == "OUT_OF_SERVICE":
+        return render(
+            request,
+            "restaurant/customer/table_out_of_service.html",
+            {"table": table},
+            status=503,
+        )
+
+    customer_user = request.user if request.user.is_authenticated else None
+    session = get_or_create_active_session(table=table, customer=customer_user)
+
+    category_slug = request.GET.get("category", "").strip().lower()
+    search_query = request.GET.get("q", "").strip()
+
+    categories = get_active_categories()
+    items_qs = get_active_menu_items(search_query=search_query)
+
+    selected_category = None
+    if category_slug and category_slug != "all":
+        for cat in categories:
+            if cat.slug_identifier == category_slug or cat.name.lower() == category_slug:
+                items_qs = items_qs.filter(category=cat)
+                selected_category = cat
+                break
+
+    items_list = list(items_qs)
+    session_orders = session.orders.exclude(status="CANCELLED")
+    active_orders_count = session_orders.count()
+
+    return render(
+        request,
+        "restaurant/customer/table_menu.html",
+        {
+            "table": table,
+            "session": session,
+            "categories": categories,
+            "items": items_list,
+            "selected_category": selected_category,
+            "search_query": search_query,
+            "qr_token": qr_token,
+            "active_orders_count": active_orders_count,
+            "session_subtotal": session.running_subtotal,
+        },
+    )
+
+
+def customer_cart(request, qr_token):
+    """
+    Customer Cart View (Section 15 & 16):
+    Review items in order before submitting to kitchen.
+    """
+    table = get_table_by_qr_token(qr_token)
+    session = get_active_session_for_table(table.id)
+    if not session:
+        session = get_or_create_active_session(table, customer=request.user if request.user.is_authenticated else None)
+
+    return render(
+        request,
+        "restaurant/customer/cart.html",
+        {
+            "table": table,
+            "session": session,
+            "qr_token": qr_token,
+        },
+    )
+
+
+def customer_place_order(request, qr_token):
+    """
+    Customer Place Order Action:
+    Processes order placement from QR session, validating item availability and prices server-side.
+    Accepts both application/json and form-encoded POST.
+    """
+    if request.method != "POST":
+        return redirect("restaurant:table_menu", qr_token=qr_token)
+
+    table = get_table_by_qr_token(qr_token)
+    session = get_active_session_for_table(table.id)
+    if not session:
+        session = get_or_create_active_session(table, customer=request.user if request.user.is_authenticated else None)
+
+    items_data = []
+    instructions = ""
+
+    if request.content_type == "application/json" or (request.body and request.body.startswith(b"{")):
+        try:
+            payload = json.loads(request.body.decode("utf-8"))
+            items_data = payload.get("items", [])
+            instructions = payload.get("instructions", "").strip()
+        except Exception:
+            return JsonResponse({"status": "error", "message": "Invalid JSON format"}, status=400)
+    else:
+        instructions = request.POST.get("instructions", "").strip()
+        for key, val in request.POST.items():
+            if key.startswith("qty_") and val:
+                try:
+                    qty = int(val)
+                    if qty > 0:
+                        item_id = int(key.replace("qty_", ""))
+                        notes = request.POST.get(f"notes_{item_id}", "").strip()
+                        items_data.append({"item_id": item_id, "quantity": qty, "notes": notes})
+                except ValueError:
+                    pass
+
+    if not items_data:
+        if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.content_type == "application/json":
+            return JsonResponse({"status": "error", "message": "No valid items selected."}, status=400)
+        messages.error(request, "Please select at least one item to order.")
+        return redirect("restaurant:customer_cart", qr_token=qr_token)
+
+    try:
+        order = create_customer_order(
+            session=session,
+            items_data=items_data,
+            customer_user=request.user if request.user.is_authenticated else None,
+            instructions=instructions,
+        )
+        if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.content_type == "application/json":
+            return JsonResponse({
+                "status": "success",
+                "order_id": order.id,
+                "message": f"Order #{order.id} sent to the kitchen!",
+                "redirect_url": reverse("restaurant:customer_orders", kwargs={"qr_token": qr_token}),
+            })
+        messages.success(request, f"Order #{order.id} has been sent to the kitchen!")
+        return redirect("restaurant:customer_orders", qr_token=qr_token)
+    except Exception as e:
+        if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.content_type == "application/json":
+            return JsonResponse({"status": "error", "message": str(e)}, status=400)
+        messages.error(request, f"Unable to place order: {e}")
+        return redirect("restaurant:customer_cart", qr_token=qr_token)
+
+
+def customer_orders(request, qr_token):
+    """
+    Customer Live Orders Tracker:
+    Shows all orders placed for this table session, their live kitchen status,
+    and estimated cooking times.
+    """
+    table = get_table_by_qr_token(qr_token)
+    session = get_active_session_for_table(table.id)
+    if not session:
+        messages.info(request, "No active dining session found.")
+        return redirect("restaurant:table_menu", qr_token=qr_token)
+
+    orders = session.orders.prefetch_related("items__menu_item").order_by("-created_at")
+
+    if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.GET.get("format") == "json":
+        data = []
+        for o in orders:
+            items = []
+            for item in o.items.all():
+                items.append({
+                    "id": item.id,
+                    "name": item.menu_item.name,
+                    "quantity": item.quantity,
+                    "status": item.status,
+                    "unit_price": str(item.unit_price),
+                    "total_price": str(item.total_price),
+                    "estimated_minutes": item.estimated_minutes,
+                })
+            data.append({
+                "id": o.id,
+                "status": o.status,
+                "created_at": o.created_at.strftime("%H:%M"),
+                "items": items,
+            })
+        return JsonResponse({"orders": data, "session_status": session.status})
+
+    return render(
+        request,
+        "restaurant/customer/orders.html",
+        {
+            "table": table,
+            "session": session,
+            "orders": orders,
+            "qr_token": qr_token,
+        },
+    )
+
+
+def customer_bill(request, qr_token):
+    """
+    Customer Bill View:
+    Displays consolidated session bill with items, 5% GST, discounts, and payment status.
+    Allows requesting the bill to notify floor waiter and cashier.
+    """
+    table = get_table_by_qr_token(qr_token)
+    session = get_active_session_for_table(table.id)
+    if not session:
+        messages.info(request, "No active dining session found.")
+        return redirect("restaurant:table_menu", qr_token=qr_token)
+
+    bill = None
+    orders = session.orders.prefetch_related("items__menu_item").exclude(status="CANCELLED")
+
+    if session.running_subtotal > Decimal("0.00"):
+        bill = calculate_and_generate_bill(session)
+
+    return render(
+        request,
+        "restaurant/customer/bill.html",
+        {
+            "table": table,
+            "session": session,
+            "bill": bill,
+            "orders": orders,
+            "qr_token": qr_token,
+        },
+    )
+
+
+def customer_request_bill(request, qr_token):
+    """
+    Customer requests the bill (Sections 18 & 43).
+    Marks Bill -> REQUESTED and Table -> BILL_PENDING.
+    """
+    if request.method != "POST":
+        return redirect("restaurant:customer_bill", qr_token=qr_token)
+
+    table = get_table_by_qr_token(qr_token)
+    session = get_active_session_for_table(table.id)
+    if not session:
+        messages.error(request, "No active session for this table.")
+        return redirect("restaurant:table_menu", qr_token=qr_token)
+
+    try:
+        bill = request_bill_from_customer(session)
+        if request.headers.get("x-requested-with") == "XMLHttpRequest":
+            return JsonResponse({
+                "status": "success",
+                "message": "Bill requested! A waiter or cashier will assist you shortly.",
+                "total": str(bill.total),
+            })
+        messages.success(request, f"Bill of ₹{bill.total} requested! A staff member will assist you shortly.")
+    except Exception as e:
+        if request.headers.get("x-requested-with") == "XMLHttpRequest":
+            return JsonResponse({"status": "error", "message": str(e)}, status=400)
+        messages.error(request, f"Could not request bill: {e}")
+
+    return redirect("restaurant:customer_bill", qr_token=qr_token)
+
+
+# ==============================================================================
+# MANAGER CATEGORIES & STAFF ROLE MANAGEMENT
+# ==============================================================================
+
+@manager_required
+def manager_categories_list(request):
+    """
+    Manager Categories Management:
+    Lists all categories with item counts and status controls.
+    """
+    categories = MenuCategory.objects.annotate(item_count=Count("items")).order_by("name")
+    return render(
+        request,
+        "restaurant/manager/categories.html",
+        {
+            "categories": categories,
+        },
+    )
+
+
+@manager_required
+def manager_category_add(request):
+    """Manager adds a new menu category."""
+    if request.method == "POST":
+        form = MenuCategoryForm(request.POST)
+        if form.is_valid():
+            cat = form.save()
+            messages.success(request, f"Category '{cat.name}' created successfully.")
+            return redirect("restaurant:manager_categories_list")
+    else:
+        form = MenuCategoryForm()
+
+    return render(
+        request,
+        "restaurant/manager/category_form.html",
+        {
+            "form": form,
+            "is_edit": False,
+            "page_title": "Add Menu Category",
+        },
+    )
+
+
+@manager_required
+def manager_category_edit(request, category_id):
+    """Manager edits an existing menu category."""
+    category = get_object_or_404(MenuCategory, pk=category_id)
+    if request.method == "POST":
+        form = MenuCategoryForm(request.POST, instance=category)
+        if form.is_valid():
+            cat = form.save()
+            messages.success(request, f"Category '{cat.name}' updated successfully.")
+            return redirect("restaurant:manager_categories_list")
+    else:
+        form = MenuCategoryForm(instance=category)
+
+    return render(
+        request,
+        "restaurant/manager/category_form.html",
+        {
+            "form": form,
+            "category": category,
+            "is_edit": True,
+            "page_title": f"Edit Category: {category.name}",
+        },
+    )
+
+
+@manager_required
+def manager_category_toggle(request, category_id):
+    """Manager toggles is_active for a category."""
+    if request.method == "POST":
+        category = get_object_or_404(MenuCategory, pk=category_id)
+        category.is_active = not category.is_active
+        category.save(update_fields=["is_active", "updated_at"])
+        status_label = "activated" if category.is_active else "deactivated"
+        messages.success(request, f"Category '{category.name}' has been {status_label}.")
+    return redirect("restaurant:manager_categories_list")
+
+
+@manager_required
+def manager_staff_roles(request):
+    """
+    Manager Staff Role Management:
+    Allows Managers and Admins to view users and assign staff roles
+    (WAITER, CHEF, CASHIER, MANAGER, ADMIN, CUSTOMER).
+    """
+    roles = ["WAITER", "CHEF", "CASHIER", "MANAGER", "ADMIN", "CUSTOMER"]
+    for r in roles:
+        Group.objects.get_or_create(name=r)
+
+    if request.method == "POST":
+        user_id = request.POST.get("user_id")
+        selected_role = request.POST.get("role")
+        target_user = get_object_or_404(User, pk=user_id)
+
+        if selected_role in roles:
+            for r in roles:
+                group = Group.objects.filter(name=r).first()
+                if group:
+                    target_user.groups.remove(group)
+
+            new_group = Group.objects.get(name=selected_role)
+            target_user.groups.add(new_group)
+
+            if selected_role in ["WAITER", "CHEF", "CASHIER", "MANAGER", "ADMIN"]:
+                target_user.is_staff = True
+            else:
+                target_user.is_staff = False
+            target_user.save(update_fields=["is_staff"])
+
+            messages.success(request, f"Assigned role '{selected_role}' to {target_user.username} ({target_user.email}).")
+            return redirect("restaurant:manager_staff_roles")
+
+    search_q = request.GET.get("q", "").strip()
+    users_qs = User.objects.prefetch_related("groups").order_by("-date_joined")
+    if search_q:
+        users_qs = users_qs.filter(
+            Q(username__icontains=search_q) |
+            Q(email__icontains=search_q) |
+            Q(first_name__icontains=search_q)
+        )
+
+    users_list = users_qs[:50]
+    return render(
+        request,
+        "restaurant/manager/staff_roles.html",
+        {
+            "users": users_list,
+            "roles": roles,
+            "search_q": search_q,
+        },
+    )
 

@@ -1,0 +1,256 @@
+{% extends "restaurant/base.html" %}
+{% load static %}
+
+{% block title %}Staff Access & Roles | Manager Portal{% endblock %}
+
+{% block head %}
+<style>
+  .manager-shell {
+    min-height: calc(100vh - 170px);
+    padding: 140px max(6vw, 24px) 90px;
+    background: 
+      radial-gradient(circle at 85% 15%, rgba(6, 182, 212, 0.12), transparent 45%),
+      linear-gradient(180deg, #030813 0%, #061124 50%, #08162b 100%);
+    color: var(--text-primary);
+  }
+
+  .manager-container {
+    max-width: 1200px;
+    margin: auto;
+  }
+
+  .portal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 24px;
+    flex-wrap: wrap;
+    margin-bottom: 36px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border-glass);
+  }
+
+  .portal-header h1 {
+    margin: 8px 0 0;
+    font-size: clamp(32px, 4vw, 44px);
+    font-weight: 800;
+    color: #ffffff;
+  }
+
+  .portal-nav {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .search-bar-row {
+    margin-bottom: 24px;
+    display: flex;
+    gap: 12px;
+  }
+
+  .search-input {
+    flex: 1;
+    max-width: 400px;
+    background: rgba(9, 23, 44, 0.7);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-md);
+    padding: 10px 16px;
+    color: #ffffff;
+    font-size: 14px;
+    outline: none;
+  }
+
+  .table-card {
+    background: rgba(9, 23, 44, 0.75);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    backdrop-filter: blur(16px);
+    overflow-x: auto;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+    font-size: 14px;
+  }
+
+  .data-table th {
+    padding: 16px 20px;
+    color: var(--text-muted);
+    font: 600 11px var(--mono);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border-glass);
+    background: rgba(3, 8, 19, 0.4);
+  }
+
+  .data-table td {
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+  }
+
+  .data-table tr:hover td {
+    background: rgba(6, 182, 212, 0.04);
+  }
+
+  .role-select {
+    background: rgba(3, 8, 19, 0.8);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-sm);
+    color: #ffffff;
+    padding: 6px 12px;
+    font: 600 12px var(--mono);
+    outline: none;
+  }
+
+  .btn-assign-role {
+    background: var(--accent-gradient);
+    border: none;
+    border-radius: var(--radius-sm);
+    color: #ffffff;
+    padding: 6px 14px;
+    font: 700 12px var(--manrope);
+    cursor: pointer;
+    transition: transform .2s;
+  }
+
+  .btn-assign-role:hover {
+    transform: translateY(-2px);
+  }
+
+  .role-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font: 700 10px var(--mono);
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+
+  .role-badge.MANAGER, .role-badge.ADMIN {
+    background: rgba(243, 194, 113, 0.15);
+    color: var(--gold-light);
+    border: 1px solid rgba(243, 194, 113, 0.4);
+  }
+
+  .role-badge.CHEF {
+    background: rgba(6, 182, 212, 0.15);
+    color: var(--cyan);
+    border: 1px solid rgba(6, 182, 212, 0.4);
+  }
+
+  .role-badge.WAITER {
+    background: rgba(96, 165, 250, 0.15);
+    color: #60a5fa;
+    border: 1px solid rgba(96, 165, 250, 0.4);
+  }
+
+  .role-badge.CASHIER {
+    background: rgba(52, 211, 153, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(52, 211, 153, 0.4);
+  }
+
+  .role-badge.CUSTOMER {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-muted);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="manager-shell">
+  <div class="manager-container">
+    
+    <div class="portal-header">
+      <div>
+        <p class="eyebrow">STAFF ACCESS CONTROL <span>• ROLE MANAGEMENT</span></p>
+        <h1>Staff Roles & Permissions</h1>
+      </div>
+
+      <div class="portal-nav">
+        <a class="button button-outline" href="{% url 'restaurant:manager_dashboard' %}">Dashboard</a>
+        <a class="button button-outline" href="{% url 'restaurant:manager_menu_list' %}">Menu Management</a>
+        <a class="button button-outline" href="{% url 'restaurant:manager_categories_list' %}">Categories</a>
+      </div>
+    </div>
+
+    <form method="get" class="search-bar-row">
+      <input type="text" name="q" value="{{ search_q }}" placeholder="Search user by username, email..." class="search-input">
+      <button type="submit" class="button button-small">Search</button>
+    </form>
+
+    <div class="table-card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>User Account</th>
+            <th>Email</th>
+            <th>Current Role</th>
+            <th>Staff Flag</th>
+            <th>Assign New Role</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for u in users %}
+            <tr>
+              <td>
+                <b style="color: #ffffff;">{{ u.username }}</b>
+                {% if u.first_name %}<div style="font-size: 12px; color: var(--text-muted);">{{ u.first_name }} {{ u.last_name }}</div>{% endif %}
+              </td>
+              <td style="color: var(--text-secondary); font-family: var(--mono); font-size: 13px;">
+                {{ u.email }}
+              </td>
+              <td>
+                {% with current_group=u.groups.first %}
+                  {% if current_group %}
+                    <span class="role-badge {{ current_group.name }}">{{ current_group.name }}</span>
+                  {% else %}
+                    <span class="role-badge CUSTOMER">CUSTOMER</span>
+                  {% endif %}
+                {% endwith %}
+              </td>
+              <td>
+                {% if u.is_superuser %}
+                  <span style="color: var(--gold-light); font: 700 11px var(--mono);">SUPERUSER</span>
+                {% elif u.is_staff %}
+                  <span style="color: #34d399; font: 700 11px var(--mono);">STAFF</span>
+                {% else %}
+                  <span style="color: var(--text-dim); font: 500 11px var(--mono);">REGULAR</span>
+                {% endif %}
+              </td>
+              <td>
+                <form method="post" style="display: flex; gap: 8px; align-items: center;">
+                  {% csrf_token %}
+                  <input type="hidden" name="user_id" value="{{ u.id }}">
+                  <select name="role" class="role-select">
+                    {% for role in roles %}
+                      <option value="{{ role }}" {% if u.groups.first.name == role %}selected{% endif %}>
+                        {{ role }}
+                      </option>
+                    {% endfor %}
+                  </select>
+                  <button type="submit" class="btn-assign-role">Update</button>
+                </form>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="5" style="text-align: center; padding: 40px; color: var(--text-muted);">
+                No users found.
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</section>
+{% endblock %}
+

@@ -7,20 +7,19 @@ from django.urls import reverse
 
 def user_has_any_role(user, allowed_roles):
     """
-    Checks if a user belongs to any of the allowed roles, or is a superuser/staff admin.
+    Checks if a user belongs to any of the allowed roles, or is a superuser.
+    Strictly checks group membership so that staff status does not bypass role boundaries.
     """
     if not user.is_authenticated:
         return False
     if user.is_superuser:
-        return True
-    if user.is_staff and ("ADMIN" in allowed_roles or "MANAGER" in allowed_roles):
         return True
     return user.groups.filter(name__in=allowed_roles).exists()
 
 
 def role_required(allowed_roles, redirect_url="restaurant:home"):
     """
-    Decorator to restrict view access to specific roles.
+    Decorator to restrict view access strictly to specific roles.
     If unauthenticated, redirects to login with next parameter.
     If authenticated but unauthorized, raises PermissionDenied (HTTP 403).
     """
@@ -42,22 +41,22 @@ def role_required(allowed_roles, redirect_url="restaurant:home"):
 
 
 def manager_required(view_func):
-    """Restricts view to MANAGER and ADMIN roles."""
+    """Restricts view strictly to MANAGER and ADMIN roles."""
     return role_required(["MANAGER", "ADMIN"])(view_func)
 
 
 def chef_required(view_func):
-    """Restricts view to CHEF, MANAGER, and ADMIN roles."""
-    return role_required(["CHEF", "MANAGER", "ADMIN"])(view_func)
+    """Restricts view strictly to CHEF and ADMIN roles."""
+    return role_required(["CHEF", "ADMIN"])(view_func)
 
 
 def waiter_required(view_func):
-    """Restricts view to WAITER, MANAGER, and ADMIN roles."""
-    return role_required(["WAITER", "MANAGER", "ADMIN"])(view_func)
+    """Restricts view strictly to WAITER and ADMIN roles."""
+    return role_required(["WAITER", "ADMIN"])(view_func)
 
 
 def cashier_required(view_func):
-    """Restricts view to CASHIER, MANAGER, and ADMIN roles."""
-    return role_required(["CASHIER", "MANAGER", "ADMIN"])(view_func)
+    """Restricts view strictly to CASHIER and ADMIN roles."""
+    return role_required(["CASHIER", "ADMIN"])(view_func)
 
 

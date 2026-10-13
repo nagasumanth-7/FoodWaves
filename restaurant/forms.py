@@ -163,6 +163,28 @@ class ReservationForm(forms.ModelForm):
         return phone
 
 
+class MenuCategoryForm(forms.ModelForm):
+    class Meta:
+        from .models import MenuCategory
+        model = MenuCategory
+        fields = ["name", "description", "is_active"]
+        widgets = {
+            "name": forms.TextInput(attrs={"placeholder": "e.g. Tandoori Starters", "class": "form-control"}),
+            "description": forms.Textarea(attrs={
+                "rows": 3,
+                "placeholder": "Category description...",
+                "class": "form-control",
+            }),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+    def clean_name(self):
+        name = self.cleaned_data.get("name", "").strip()
+        if not name:
+            raise forms.ValidationError("Category name is required.")
+        return name
+
+
 class MenuItemForm(forms.ModelForm):
     class Meta:
         from .models import MenuItem
@@ -174,8 +196,7 @@ class MenuItemForm(forms.ModelForm):
             "price",
             "image",
             "preparation_time",
-            "is_available",
-            "availability_reason",
+            "is_active",
         ]
         widgets = {
             "category": forms.Select(attrs={"class": "form-control"}),
@@ -188,8 +209,7 @@ class MenuItemForm(forms.ModelForm):
             "price": forms.NumberInput(attrs={"min": "0", "step": "0.01", "placeholder": "290.00", "class": "form-control"}),
             "image": forms.FileInput(attrs={"class": "form-control", "accept": "image/*"}),
             "preparation_time": forms.NumberInput(attrs={"min": "1", "max": "180", "placeholder": "15", "class": "form-control"}),
-            "is_available": forms.CheckboxInput(attrs={"class": "form-check-input"}),
-            "availability_reason": forms.TextInput(attrs={"placeholder": "Optional reason if unavailable (e.g. stock finished)", "class": "form-control"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
 
     def clean_name(self):

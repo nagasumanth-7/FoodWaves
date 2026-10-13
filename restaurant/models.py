@@ -15,11 +15,50 @@ class UserProfile(models.Model):
         return f"{self.user.email} Profile"
 
 
+class RestaurantTable(models.Model):
+    STATUS_CHOICES = [
+        ("AVAILABLE", "Available"),
+        ("RESERVED", "Reserved"),
+        ("OCCUPIED", "Occupied"),
+        ("BILL_PENDING", "Bill Pending"),
+        ("OUT_OF_SERVICE", "Out of Service"),
+    ]
+
+    AREA_CHOICES = [
+        ("INDOOR", "Main Dining Hall"),
+        ("TERRACE", "Outdoor Terrace"),
+        ("WINDOW", "Window View"),
+        ("BOOTH", "Private Booth"),
+    ]
+
+    table_number = models.CharField(max_length=20, unique=True)
+    capacity = models.PositiveIntegerField(default=4)
+    floor_area = models.CharField(max_length=20, choices=AREA_CHOICES, default="INDOOR")
+    qr_token = models.CharField(max_length=64, unique=True, default=uuid.uuid4)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="AVAILABLE")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["table_number"]
+
+    def __str__(self):
+        return f"Table {self.table_number} ({self.capacity} seats, {self.get_floor_area_display()}) - {self.status}"
+
+    @property
+    def current_session(self):
+        return self.sessions.filter(status="ACTIVE").first()
+
+
 class Reservation(models.Model):
     STATUS_CHOICES = [
+        ("PENDING", "Pending"),
         ("CONFIRMED", "Confirmed"),
+        ("ARRIVED", "Arrived"),
         ("CANCELLED", "Cancelled"),
         ("COMPLETED", "Completed"),
+        ("NO_SHOW", "No Show"),
     ]
 
     SEATING_CHOICES = [
@@ -31,6 +70,7 @@ class Reservation(models.Model):
     ]
 
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="reservations")
+    table = models.ForeignKey(RestaurantTable, on_delete=models.SET_NULL, null=True, blank=True, related_name="reservations")
     name = models.CharField(max_length=150)
     email = models.EmailField()
     phone_number = models.CharField(max_length=20)
@@ -55,7 +95,7 @@ class Reservation(models.Model):
 
     @property
     def can_cancel(self):
-        return self.status == "CONFIRMED" and not self.is_past
+        return self.status in ["PENDING", "CONFIRMED"] and not self.is_past
 
 
 # ==============================================================================
@@ -114,48 +154,14 @@ class MenuItem(models.Model):
 
 
 # ==============================================================================
-# FUTURE SYSTEM ARCHITECTURE MODELS (TABLES, ORDERS, BILLING)
+# RESTAURANT TABLES, SESSIONS, ORDERS, BILLING
 # ==============================================================================
-
-class RestaurantTable(models.Model):
-    STATUS_CHOICES = [
-        ("AVAILABLE", "Available"),
-        ("RESERVED", "Reserved"),
-        ("OCCUPIED", "Occupied"),
-        ("BILL_PENDING", "Bill Pending"),
-        ("OUT_OF_SERVICE", "Out of Service"),
-    ]
-
-    AREA_CHOICES = [
-        ("INDOOR", "Main Dining Hall"),
-        ("TERRACE", "Outdoor Terrace"),
-        ("WINDOW", "Window View"),
-        ("BOOTH", "Private Booth"),
-    ]
-
-    table_number = models.CharField(max_length=20, unique=True)
-    capacity = models.PositiveIntegerField(default=4)
-    floor_area = models.CharField(max_length=20, choices=AREA_CHOICES, default="INDOOR")
-    qr_token = models.CharField(max_length=64, unique=True, default=uuid.uuid4)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="AVAILABLE")
-    is_active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["table_number"]
-
-    def __str__(self):
-        return f"Table {self.table_number} ({self.capacity} seats, {self.get_floor_area_display()}) - {self.status}"
-
-    @property
-    def current_session(self):
-        return self.sessions.filter(status="ACTIVE").first()
-
 
 class TableSession(models.Model):
     STATUS_CHOICES = [
         ("ACTIVE", "Active"),
+        ("BILL_PENDING", "Bill Pending"),
+        ("CLOSED", "Closed"),
         ("COMPLETED", "Completed"),
         ("CANCELLED", "Cancelled"),
     ]
@@ -172,6 +178,13 @@ class TableSession(models.Model):
 
     class Meta:
         ordering = ["-opened_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["table"],
+                condition=models.Q(status="ACTIVE"),
+                name="one_active_session_per_table",
+            )
+        ]
 
     def __str__(self):
         return f"Session #{self.id} on Table {self.table.table_number} ({self.status})"
@@ -222,6 +235,22 @@ class Order(models.Model):
         return f"Order #{self.id} for Session #{self.session_id} [{self.source}] - {self.status}"
 
     @property
+    def table_session(self):
+        return self.session
+
+    @table_session.setter
+    def table_session(self, val):
+        self.session = val
+
+    @property
+    def created_by(self):
+        return self.placed_by
+
+    @created_by.setter
+    def created_by(self, val):
+        self.placed_by = val
+
+    @property
     def order_total(self):
         return sum(item.subtotal for item in self.items.exclude(status="CANCELLED"))
 
@@ -236,16 +265,16 @@ class OrderItem(models.Model):
     ]
 
     order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
-    # Section 32: Use on_delete=models.PROTECT so historical menu items cannot be cascade deleted
+    # Section 8 & 32: Use on_delete=models.PROTECT so historical menu items cannot be cascade deleted
     menu_item = models.ForeignKey(MenuItem, on_delete=models.PROTECT, related_name="order_items")
     quantity = models.PositiveIntegerField(default=1)
-    # Section 20: unit_price must be stored in OrderItem to freeze historical prices
+    # Section 14: unit_price must be stored in OrderItem to freeze historical prices
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     special_instructions = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="PENDING")
-    started_at = models.DateTimeField(null=True, blank=True)
     estimated_minutes = models.PositiveIntegerField(null=True, blank=True)
     estimated_ready_at = models.DateTimeField(null=True, blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
     ready_at = models.DateTimeField(null=True, blank=True)
     served_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -261,11 +290,18 @@ class OrderItem(models.Model):
     def subtotal(self):
         return self.quantity * self.unit_price
 
+    @property
+    def total_price(self):
+        return self.subtotal
+
 
 class Bill(models.Model):
     STATUS_CHOICES = [
+        ("OPEN", "Open"),
+        ("REQUESTED", "Requested"),
         ("UNPAID", "Unpaid"),
         ("PAID", "Paid"),
+        ("CANCELLED", "Cancelled"),
         ("VOID", "Void"),
     ]
 
@@ -276,13 +312,22 @@ class Bill(models.Model):
     discount = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     tip = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     total = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="UNPAID")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="OPEN")
+    requested_at = models.DateTimeField(null=True, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return f"Bill #{self.id} for Table {self.session.table.table_number} - ₹{self.total} ({self.status})"
+
+    @property
+    def table_session(self):
+        return self.session
+
+    @table_session.setter
+    def table_session(self, val):
+        self.session = val
 
 
 class Payment(models.Model):
@@ -293,6 +338,7 @@ class Payment(models.Model):
     ]
 
     STATUS_CHOICES = [
+        ("PENDING", "Pending"),
         ("SUCCESS", "Success"),
         ("FAILED", "Failed"),
         ("REFUNDED", "Refunded"),
@@ -304,8 +350,24 @@ class Payment(models.Model):
     payment_method = models.CharField(max_length=20, choices=METHOD_CHOICES, default="UPI")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="SUCCESS")
     transaction_id = models.CharField(max_length=100, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return f"Payment #{self.id} of ₹{self.amount} via {self.payment_method} ({self.status})"
 
+    @property
+    def method(self):
+        return self.payment_method
+
+    @method.setter
+    def method(self, val):
+        self.payment_method = val
+
+    @property
+    def received_by(self):
+        return self.processed_by
+
+    @received_by.setter
+    def received_by(self, val):
+        self.processed_by = val

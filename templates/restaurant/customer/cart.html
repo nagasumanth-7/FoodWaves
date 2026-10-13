@@ -1,0 +1,479 @@
+{% extends "restaurant/base.html" %}
+{% load static %}
+
+{% block title %}Your Order Cart | Table {{ table.table_number }}{% endblock %}
+
+{% block head %}
+<style>
+  .cart-page {
+    min-height: calc(100vh - 170px);
+    padding: 130px max(5vw, 20px) 110px;
+    background: 
+      radial-gradient(circle at 80% 20%, rgba(6, 182, 212, 0.12), transparent 45%),
+      linear-gradient(180deg, #030813 0%, #061124 50%, #08162b 100%);
+    color: var(--text-primary);
+  }
+
+  .cart-shell {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .cart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-glass);
+    padding-bottom: 24px;
+    margin-bottom: 32px;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .cart-header h1 {
+    font-size: clamp(28px, 4vw, 40px);
+    font-weight: 800;
+    margin: 0;
+    color: #ffffff;
+  }
+
+  .btn-back-menu {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--cyan);
+    font: 600 13px var(--mono);
+    text-decoration: none;
+    transition: transform .2s;
+  }
+
+  .btn-back-menu:hover {
+    transform: translateX(-4px);
+  }
+
+  .cart-items-container {
+    background: rgba(9, 23, 44, 0.75);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    backdrop-filter: blur(14px);
+    margin-bottom: 32px;
+  }
+
+  .cart-item-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .cart-item-row:last-child {
+    border-bottom: none;
+  }
+
+  .item-main-info {
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .item-main-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 4px;
+  }
+
+  .item-main-price {
+    font: 600 14px var(--mono);
+    color: var(--gold-light);
+  }
+
+  .item-notes-input {
+    width: 100%;
+    margin-top: 8px;
+    background: rgba(3, 8, 19, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-sm);
+    padding: 6px 12px;
+    font-size: 12px;
+    color: #ffffff;
+    outline: none;
+  }
+
+  .item-notes-input:focus {
+    border-color: var(--cyan);
+  }
+
+  .cart-qty-ctrls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .qty-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--border-glass);
+    background: rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all .2s;
+  }
+
+  .qty-btn:hover {
+    background: var(--cyan);
+    color: #030813;
+  }
+
+  .qty-number {
+    font: 700 15px var(--mono);
+    min-width: 24px;
+    text-align: center;
+  }
+
+  .item-subtotal {
+    font: 700 16px var(--mono);
+    color: #ffffff;
+    min-width: 90px;
+    text-align: right;
+  }
+
+  .btn-remove-item {
+    background: transparent;
+    border: none;
+    color: #f87171;
+    cursor: pointer;
+    font-size: 18px;
+    padding: 4px;
+  }
+
+  /* Instructions & Summary */
+  .instructions-box {
+    margin-bottom: 32px;
+  }
+
+  .instructions-box label {
+    display: block;
+    font: 600 13px var(--mono);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .instructions-input {
+    width: 100%;
+    background: rgba(9, 23, 44, 0.75);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-md);
+    padding: 14px 18px;
+    color: #ffffff;
+    font-size: 14px;
+    outline: none;
+    min-height: 80px;
+    resize: vertical;
+  }
+
+  .instructions-input:focus {
+    border-color: var(--cyan);
+  }
+
+  /* Summary Card */
+  .summary-card {
+    background: rgba(9, 23, 44, 0.85);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    backdrop-filter: blur(16px);
+  }
+
+  .summary-line {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+
+  .summary-line.total {
+    font-size: 20px;
+    font-weight: 800;
+    color: #ffffff;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 16px;
+    margin-top: 16px;
+  }
+
+  .summary-line.total span:last-child {
+    font-family: var(--mono);
+    color: var(--gold-light);
+  }
+
+  .btn-submit-order {
+    width: 100%;
+    margin-top: 24px;
+    padding: 16px;
+    border-radius: var(--radius-md);
+    background: var(--accent-gradient);
+    border: none;
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 8px 24px rgba(6, 182, 212, 0.4);
+    transition: transform .2s, box-shadow .2s;
+  }
+
+  .btn-submit-order:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px rgba(6, 182, 212, 0.5);
+  }
+
+  .empty-cart-state {
+    text-align: center;
+    padding: 80px 20px;
+    background: rgba(9, 23, 44, 0.6);
+    border: 1px dashed var(--border-glass);
+    border-radius: var(--radius-lg);
+  }
+
+  .empty-cart-state h3 {
+    font-size: 22px;
+    color: #ffffff;
+    margin-bottom: 12px;
+  }
+
+  .empty-cart-state p {
+    color: var(--text-muted);
+    margin-bottom: 24px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cart-page">
+  <div class="cart-shell">
+    
+    <div class="cart-header">
+      <div>
+        <h1>Table {{ table.table_number }} Order Cart</h1>
+        <div style="font: 500 13px var(--mono); color: var(--text-muted); margin-top: 4px;">
+          Party: {{ session.guest_name }} • Seating: {{ table.get_floor_area_display }}
+        </div>
+      </div>
+      <a href="{% url 'restaurant:table_menu' qr_token=qr_token %}" class="btn-back-menu">← Back to Menu</a>
+    </div>
+
+    <!-- Active Cart Section -->
+    <div id="cartActiveSection" style="display: none;">
+      <div class="cart-items-container" id="cartItemsList">
+        <!-- Dynamically populated via JS -->
+      </div>
+
+      <div class="instructions-box">
+        <label for="orderInstructions">Special Kitchen Notes / Allergies</label>
+        <textarea id="orderInstructions" class="instructions-input" placeholder="e.g. Mild spice for starters, bring rice together with curries..."></textarea>
+      </div>
+
+      <div class="summary-card">
+        <div class="summary-line">
+          <span>Items Subtotal</span>
+          <span id="subtotalDisplay" style="font-family: var(--mono);">₹0.00</span>
+        </div>
+        <div class="summary-line">
+          <span>Estimated 5% Restaurant GST</span>
+          <span id="taxDisplay" style="font-family: var(--mono);">₹0.00</span>
+        </div>
+        <div class="summary-line total">
+          <span>Total Payable</span>
+          <span id="totalDisplay">₹0.00</span>
+        </div>
+
+        <button type="button" class="btn-submit-order" id="btnPlaceOrder" onclick="submitOrder()">
+          🚀 Send Order to Kitchen
+        </button>
+      </div>
+    </div>
+
+    <!-- Empty Cart Section -->
+    <div id="cartEmptySection" class="empty-cart-state" style="display: none;">
+      <h3>Your dining cart is currently empty</h3>
+      <p>Browse our curated culinary menu and add delicious dishes to your table.</p>
+      <a href="{% url 'restaurant:table_menu' qr_token=qr_token %}" class="button">Explore Table Menu</a>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const QR_TOKEN = "{{ qr_token }}";
+  const CART_KEY = `foodwaves_cart_${QR_TOKEN}`;
+
+  function getCart() {
+    try {
+      const stored = localStorage.getItem(CART_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch(e) {
+      return [];
+    }
+  }
+
+  function saveCart(cart) {
+    localStorage.setItem(CART_KEY, JSON.stringify(cart));
+    renderCart();
+  }
+
+  function updateItemQty(itemId, delta) {
+    let cart = getCart();
+    let item = cart.find(i => i.item_id === itemId);
+    if (item) {
+      item.quantity += delta;
+      if (item.quantity <= 0) {
+        cart = cart.filter(i => i.item_id !== itemId);
+      }
+    }
+    saveCart(cart);
+  }
+
+  function updateItemNotes(itemId, notes) {
+    let cart = getCart();
+    let item = cart.find(i => i.item_id === itemId);
+    if (item) {
+      item.notes = notes;
+      localStorage.setItem(CART_KEY, JSON.stringify(cart));
+    }
+  }
+
+  function removeItem(itemId) {
+    let cart = getCart();
+    cart = cart.filter(i => i.item_id !== itemId);
+    saveCart(cart);
+  }
+
+  function renderCart() {
+    const cart = getCart();
+    const activeSec = document.getElementById("cartActiveSection");
+    const emptySec = document.getElementById("cartEmptySection");
+    const itemsList = document.getElementById("cartItemsList");
+
+    if (cart.length === 0) {
+      activeSec.style.display = "none";
+      emptySec.style.display = "block";
+      return;
+    }
+
+    emptySec.style.display = "none";
+    activeSec.style.display = "block";
+
+    let html = "";
+    let subtotal = 0;
+
+    cart.forEach(item => {
+      const lineTotal = item.price * item.quantity;
+      subtotal += lineTotal;
+
+      html += `
+        <div class="cart-item-row">
+          <div class="item-main-info">
+            <div class="item-main-name">${item.name}</div>
+            <div class="item-main-price">₹${item.price.toFixed(2)} each</div>
+            <input type="text" class="item-notes-input" placeholder="Cooking preference (e.g. less oil, extra spicy)" 
+                   value="${item.notes || ''}" onchange="updateItemNotes(${item.item_id}, this.value)">
+          </div>
+
+          <div class="cart-qty-ctrls">
+            <button class="qty-btn" onclick="updateItemQty(${item.item_id}, -1)">-</button>
+            <span class="qty-number">${item.quantity}</span>
+            <button class="qty-btn" onclick="updateItemQty(${item.item_id}, 1)">+</button>
+          </div>
+
+          <div class="item-subtotal">₹${lineTotal.toFixed(2)}</div>
+
+          <button class="btn-remove-item" onclick="removeItem(${item.item_id})" title="Remove item">×</button>
+        </div>
+      `;
+    });
+
+    itemsList.innerHTML = html;
+
+    const gst = subtotal * 0.05;
+    const grandTotal = subtotal + gst;
+
+    document.getElementById("subtotalDisplay").textContent = `₹${subtotal.toFixed(2)}`;
+    document.getElementById("taxDisplay").textContent = `₹${gst.toFixed(2)}`;
+    document.getElementById("totalDisplay").textContent = `₹${grandTotal.toFixed(2)}`;
+  }
+
+  async function submitOrder() {
+    const cart = getCart();
+    if (cart.length === 0) return;
+
+    const btn = document.getElementById("btnPlaceOrder");
+    btn.disabled = true;
+    btn.textContent = "Validating with kitchen...";
+
+    // 1. Validate cart availability
+    try {
+      const valRes = await fetch("{% url 'restaurant:api_validate_cart' %}", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": "{{ csrf_token }}"
+        },
+        body: JSON.stringify({ items: cart })
+      });
+      const valData = await valRes.json();
+
+      if (!valRes.ok || !valData.valid) {
+        alert("Some items could not be placed:\n" + (valData.errors ? valData.errors.join("\n") : valData.message));
+        btn.disabled = false;
+        btn.textContent = "🚀 Send Order to Kitchen";
+        return;
+      }
+    } catch(err) {
+      console.warn("Validation request note:", err);
+    }
+
+    // 2. Submit order to kitchen
+    btn.textContent = "Transmitting order to Kitchen KDS...";
+    const instructions = document.getElementById("orderInstructions").value;
+
+    try {
+      const res = await fetch("{% url 'restaurant:customer_place_order' qr_token=qr_token %}", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": "{{ csrf_token }}"
+        },
+        body: JSON.stringify({
+          items: cart,
+          instructions: instructions
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.status === "success") {
+        // Clear cart
+        localStorage.removeItem(CART_KEY);
+        window.location.href = data.redirect_url;
+      } else {
+        alert("Failed to place order: " + (data.message || "Unknown error"));
+        btn.disabled = false;
+        btn.textContent = "🚀 Send Order to Kitchen";
+      }
+    } catch(err) {
+      alert("Network error while submitting order. Please notify your waiter.");
+      btn.disabled = false;
+      btn.textContent = "🚀 Send Order to Kitchen";
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", renderCart);
+</script>
+{% endblock %}
+

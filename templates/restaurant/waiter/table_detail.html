@@ -188,11 +188,6 @@
             <div style="display: inline-flex; align-items: center; padding: 10px 18px; background: rgba(251, 191, 36, 0.15); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: var(--radius-sm); color: #fbbf24; font-size: 13px; font-weight: 600;">
               ⏳ Bill Sent to Cashier — Awaiting Payment Settlement
             </div>
-            {% if bill %}
-              <a href="{% url 'restaurant:cashier_settle_bill' bill.id %}" class="button" style="background: rgba(52, 211, 153, 0.2); border-color: #34d399; color: #34d399;">
-                Go to Cashier Checkout →
-              </a>
-            {% endif %}
           {% endif %}
         </div>
 

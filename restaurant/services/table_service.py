@@ -1,4 +1,5 @@
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from ..models import RestaurantTable, TableSession, Reservation
@@ -19,53 +20,100 @@ def get_table_by_id(table_id):
     return get_object_or_404(RestaurantTable, pk=table_id, is_active=True)
 
 
+def get_table_by_qr_token(qr_token):
+    """
+    Section 10: Secure table lookup via cryptographically unique QR token.
+    Never trusts manual URL query parameter table IDs.
+    """
+    return get_object_or_404(RestaurantTable, qr_token=qr_token, is_active=True)
+
+
 def get_active_session_for_table(table_id):
     """Returns the currently active TableSession for a table, if one exists."""
     return TableSession.objects.filter(table_id=table_id, status="ACTIVE").first()
 
 
+def get_or_create_active_session(table, customer=None, guest_name=None, guest_count=None, waiter_user=None, reservation=None):
+    """
+    Section 4 & 39: Thread-safe, atomic retrieval or creation of a TableSession.
+    Uses select_for_update() on RestaurantTable to eliminate race conditions
+    when multiple customers scan the same table QR code simultaneously.
+    """
+    with transaction.atomic():
+        # Lock table record during session check/creation
+        locked_table = RestaurantTable.objects.select_for_update().get(pk=table.pk)
+
+        # 1. Check if an active session already exists for this table
+        existing_session = TableSession.objects.filter(table=locked_table, status="ACTIVE").first()
+        if existing_session:
+            # If user is logged in and session customer wasn't set, link customer
+            if customer and customer.is_authenticated and not existing_session.customer:
+                existing_session.customer = customer
+                existing_session.save(update_fields=["customer"])
+            return existing_session
+
+        # 2. If table is OUT_OF_SERVICE, reject session creation
+        if locked_table.status == "OUT_OF_SERVICE":
+            raise ValidationError(f"Table {locked_table.table_number} is currently out of service.")
+
+        # 3. Create a new active session
+        name = (guest_name or "").strip()
+        if not name:
+            if customer and customer.is_authenticated:
+                name = customer.first_name or customer.username
+            else:
+                name = f"Table {locked_table.table_number} Guests"
+
+        count = int(guest_count) if guest_count else 2
+
+        new_session = TableSession.objects.create(
+            table=locked_table,
+            customer=customer if (customer and customer.is_authenticated) else None,
+            guest_name=name,
+            guest_count=count,
+            waiter=waiter_user,
+            reservation=reservation,
+            status="ACTIVE",
+        )
+
+        locked_table.status = "OCCUPIED"
+        locked_table.save(update_fields=["status"])
+
+        return new_session
+
+
 def open_table_session(table, guest_name, guest_count, waiter_user=None, reservation=None):
     """
-    Opens a new dining session for a table.
-    Sets table status to OCCUPIED and creates TableSession.
+    Convenience wrapper for floor waiters seating guests.
     """
-    if table.status not in ["AVAILABLE", "RESERVED"]:
-        raise ValidationError(f"Table {table.table_number} is currently {table.status} and cannot be seated.")
-
-    # Check if there is already an active session
-    existing_session = get_active_session_for_table(table.id)
-    if existing_session:
-        return existing_session
-
-    session = TableSession.objects.create(
+    return get_or_create_active_session(
         table=table,
-        guest_name=guest_name.strip() or f"Walk-in Guest ({table.table_number})",
-        guest_count=int(guest_count) if guest_count else 1,
-        waiter=waiter_user,
+        guest_name=guest_name,
+        guest_count=guest_count,
+        waiter_user=waiter_user,
         reservation=reservation,
-        status="ACTIVE",
     )
-
-    table.status = "OCCUPIED"
-    table.save()
-
-    return session
 
 
 def close_table_session(session):
-    """Closes an active TableSession and frees the table."""
-    session.status = "COMPLETED"
-    session.closed_at = timezone.now()
-    session.save()
+    """
+    Closes an active TableSession and frees the table back to AVAILABLE.
+    Uses transaction.atomic() to guarantee synchronized state changes.
+    """
+    with transaction.atomic():
+        session.status = "CLOSED"
+        session.closed_at = timezone.now()
+        session.save(update_fields=["status", "closed_at"])
 
-    table = session.table
-    table.status = "AVAILABLE"
-    table.save()
+        table = RestaurantTable.objects.select_for_update().get(pk=session.table_id)
+        table.status = "AVAILABLE"
+        table.save(update_fields=["status"])
 
 
 def set_table_bill_pending(table_id):
     """Marks a table status as BILL_PENDING when guests request their check."""
-    table = get_table_by_id(table_id)
-    table.status = "BILL_PENDING"
-    table.save()
-    return table
+    with transaction.atomic():
+        table = RestaurantTable.objects.select_for_update().get(pk=table_id)
+        table.status = "BILL_PENDING"
+        table.save(update_fields=["status"])
+        return table

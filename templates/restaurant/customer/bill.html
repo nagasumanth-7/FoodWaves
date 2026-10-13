@@ -1,0 +1,323 @@
+{% extends "restaurant/base.html" %}
+{% load static %}
+
+{% block title %}Table {{ table.table_number }} Consolidated Bill | Food Waves{% endblock %}
+
+{% block head %}
+<style>
+  .bill-page {
+    min-height: calc(100vh - 170px);
+    padding: 130px max(5vw, 20px) 110px;
+    background: 
+      radial-gradient(circle at 50% 15%, rgba(243, 194, 113, 0.1), transparent 50%),
+      radial-gradient(circle at 10% 70%, rgba(6, 182, 212, 0.08), transparent 45%),
+      linear-gradient(180deg, #030813 0%, #061124 50%, #08162b 100%);
+    color: var(--text-primary);
+  }
+
+  .bill-shell {
+    max-width: 760px;
+    margin: 0 auto;
+  }
+
+  .bill-top-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 28px;
+  }
+
+  .back-btn {
+    color: var(--cyan);
+    font: 600 13px var(--mono);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: transform .2s;
+  }
+
+  .back-btn:hover {
+    transform: translateX(-4px);
+  }
+
+  /* Luxury Receipt Container */
+  .receipt-card {
+    background: rgba(9, 23, 44, 0.9);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-lg);
+    padding: 40px;
+    backdrop-filter: blur(20px);
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), 0 0 30px rgba(243, 194, 113, 0.1);
+    position: relative;
+  }
+
+  .receipt-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 20px;
+    right: 20px;
+    height: 3px;
+    background: linear-gradient(90deg, var(--cyan), var(--gold), var(--cyan));
+    border-radius: 3px 3px 0 0;
+  }
+
+  .receipt-header {
+    text-align: center;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
+    padding-bottom: 24px;
+    margin-bottom: 28px;
+  }
+
+  .restaurant-title {
+    font-size: 24px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    color: #ffffff;
+    margin: 0 0 6px;
+  }
+
+  .receipt-subtitle {
+    font: 500 12px var(--mono);
+    color: var(--text-muted);
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  .table-session-meta {
+    display: flex;
+    justify-content: space-between;
+    font: 600 13px var(--mono);
+    color: var(--text-secondary);
+    margin-top: 16px;
+    background: rgba(255, 255, 255, 0.03);
+    padding: 10px 16px;
+    border-radius: var(--radius-sm);
+  }
+
+  /* Items Table */
+  .items-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 28px;
+  }
+
+  .items-table th {
+    font: 600 11px var(--mono);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    text-align: left;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .items-table th.text-right, .items-table td.text-right {
+    text-align: right;
+  }
+
+  .items-table td {
+    padding: 14px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 14px;
+    color: #ffffff;
+  }
+
+  .dish-cell-name {
+    font-weight: 700;
+  }
+
+  .dish-cell-sub {
+    font: 500 11px var(--mono);
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  /* Totals Breakdown */
+  .totals-section {
+    border-top: 1px dashed rgba(255, 255, 255, 0.15);
+    padding-top: 20px;
+    margin-bottom: 32px;
+  }
+
+  .total-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+
+  .total-row span:last-child {
+    font-family: var(--mono);
+  }
+
+  .total-row.grand-total {
+    font-size: 22px;
+    font-weight: 800;
+    color: #ffffff;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    padding-top: 16px;
+    margin-top: 16px;
+  }
+
+  .total-row.grand-total span:last-child {
+    color: var(--gold-light);
+    text-shadow: 0 0 16px rgba(243, 194, 113, 0.4);
+  }
+
+  /* Status Notices */
+  .status-box {
+    text-align: center;
+    padding: 20px;
+    border-radius: var(--radius-md);
+    margin-top: 24px;
+  }
+
+  .status-box.requested {
+    background: rgba(243, 194, 113, 0.12);
+    border: 1px solid rgba(243, 194, 113, 0.4);
+    color: var(--gold-light);
+  }
+
+  .status-box.paid {
+    background: rgba(52, 211, 153, 0.12);
+    border: 1px solid rgba(52, 211, 153, 0.4);
+    color: #34d399;
+  }
+
+  .btn-request-bill {
+    width: 100%;
+    padding: 16px;
+    border-radius: var(--radius-md);
+    background: linear-gradient(135deg, #d97706, #f59e0b);
+    border: none;
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 8px 24px rgba(245, 158, 11, 0.35);
+    transition: transform .2s, box-shadow .2s;
+  }
+
+  .btn-request-bill:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px rgba(245, 158, 11, 0.5);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="bill-page">
+  <div class="bill-shell">
+    
+    <div class="bill-top-nav">
+      <a href="{% url 'restaurant:table_menu' qr_token=qr_token %}" class="back-btn">← Back to Menu</a>
+      <a href="{% url 'restaurant:customer_orders' qr_token=qr_token %}" class="back-btn">Track Active Orders →</a>
+    </div>
+
+    <div class="receipt-card">
+      <div class="receipt-header">
+        <h2 class="restaurant-title">FOOD WAVES</h2>
+        <div class="receipt-subtitle">Consolidated Table Dining Bill</div>
+
+        <div class="table-session-meta">
+          <span>Table {{ table.table_number }} ({{ table.get_floor_area_display }})</span>
+          <span>Party: {{ session.guest_name }}</span>
+          <span>Status: {{ bill.get_status_display|default:"Active Dining" }}</span>
+        </div>
+      </div>
+
+      {% if bill and bill.subtotal > 0 %}
+        <!-- Dishes Consumed Table -->
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th>Dish Name</th>
+              <th class="text-right">Qty</th>
+              <th class="text-right">Rate</th>
+              <th class="text-right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for order in orders %}
+              {% for item in order.items.all %}
+                <tr>
+                  <td>
+                    <div class="dish-cell-name">{{ item.menu_item.name }}</div>
+                    <div class="dish-cell-sub">Order #{{ order.id }} • {{ order.get_source_display }}</div>
+                  </td>
+                  <td class="text-right">{{ item.quantity }}</td>
+                  <td class="text-right">₹{{ item.unit_price }}</td>
+                  <td class="text-right">₹{{ item.total_price }}</td>
+                </tr>
+              {% endfor %}
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <!-- Totals Breakdown -->
+        <div class="totals-section">
+          <div class="total-row">
+            <span>Subtotal</span>
+            <span>₹{{ bill.subtotal }}</span>
+          </div>
+          {% if bill.discount > 0 %}
+            <div class="total-row" style="color: #34d399;">
+              <span>Discount</span>
+              <span>-₹{{ bill.discount }}</span>
+            </div>
+          {% endif %}
+          <div class="total-row">
+            <span>5% Restaurant GST (2.5% CGST + 2.5% SGST)</span>
+            <span>₹{{ bill.tax }}</span>
+          </div>
+          {% if bill.tip > 0 %}
+            <div class="total-row">
+              <span>Gratuity / Tip</span>
+              <span>+₹{{ bill.tip }}</span>
+            </div>
+          {% endif %}
+          <div class="total-row grand-total">
+            <span>Grand Total</span>
+            <span>₹{{ bill.total }}</span>
+          </div>
+        </div>
+
+        <!-- Bill Actions / States -->
+        {% if bill.status == "PAID" %}
+          <div class="status-box paid">
+            <h3 style="margin: 0 0 6px;">✓ Payment Settled</h3>
+            <p style="margin: 0; font-size: 13px;">Thank you for dining at Food Waves! We hope to welcome you back soon.</p>
+          </div>
+        {% elif bill.status == "REQUESTED" %}
+          <div class="status-box requested">
+            <h3 style="margin: 0 0 6px;">🔔 Bill Requested</h3>
+            <p style="margin: 0; font-size: 13px;">Our floor waiter or cashier has been notified and is coming to Table {{ table.table_number }} with the bill & payment machine.</p>
+          </div>
+        {% else %}
+          <form method="post" action="{% url 'restaurant:customer_request_bill' qr_token=qr_token %}">
+            {% csrf_token %}
+            <button type="submit" class="btn-request-bill">
+              🔔 Request Final Bill & Payment
+            </button>
+          </form>
+          <p style="text-align: center; color: var(--text-dim); font-size: 12px; margin-top: 14px;">
+            Pressing Request Bill notifies your waiter and prepares the POS terminal at the cashier desk.
+          </p>
+        {% endif %}
+
+      {% else %}
+        <div style="text-align: center; padding: 50px 20px;">
+          <p style="color: var(--text-muted); font-size: 15px;">No items have been ordered on Table {{ table.table_number }} yet.</p>
+          <a href="{% url 'restaurant:table_menu' qr_token=qr_token %}" class="button">Explore Curated Menu</a>
+        </div>
+      {% endif %}
+
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+

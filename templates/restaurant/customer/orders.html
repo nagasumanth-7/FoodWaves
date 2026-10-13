@@ -1,0 +1,302 @@
+{% extends "restaurant/base.html" %}
+{% load static %}
+
+{% block title %}Live Orders Tracker | Table {{ table.table_number }}{% endblock %}
+
+{% block head %}
+<style>
+  .tracker-page {
+    min-height: calc(100vh - 170px);
+    padding: 130px max(5vw, 20px) 110px;
+    background: 
+      radial-gradient(circle at 20% 20%, rgba(6, 182, 212, 0.12), transparent 45%),
+      linear-gradient(180deg, #030813 0%, #061124 50%, #08162b 100%);
+    color: var(--text-primary);
+  }
+
+  .tracker-shell {
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .tracker-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 1px solid var(--border-glass);
+    padding-bottom: 24px;
+    margin-bottom: 32px;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .tracker-header h1 {
+    font-size: clamp(28px, 4vw, 40px);
+    font-weight: 800;
+    margin: 0;
+    color: #ffffff;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .tracker-btn {
+    padding: 10px 18px;
+    border-radius: var(--radius-md);
+    font: 600 13px var(--manrope);
+    text-decoration: none;
+    border: 1px solid var(--border-glass);
+    background: rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+    transition: all .2s;
+  }
+
+  .tracker-btn:hover {
+    border-color: var(--cyan);
+    transform: translateY(-2px);
+  }
+
+  .order-card {
+    background: rgba(9, 23, 44, 0.8);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    backdrop-filter: blur(14px);
+    margin-bottom: 24px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  }
+
+  .order-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .order-id-tag {
+    font: 700 16px var(--mono);
+    color: #ffffff;
+  }
+
+  .order-meta-info {
+    font: 500 12px var(--mono);
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .badge-status {
+    padding: 6px 14px;
+    border-radius: 20px;
+    font: 700 11px var(--mono);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .badge-status.PREPARING {
+    background: rgba(6, 182, 212, 0.15);
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+  }
+
+  .badge-status.READY {
+    background: rgba(243, 194, 113, 0.2);
+    border: 1px solid var(--gold);
+    color: var(--gold-light);
+  }
+
+  .badge-status.SERVED {
+    background: rgba(52, 211, 153, 0.15);
+    border: 1px solid #34d399;
+    color: #34d399;
+  }
+
+  .items-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .item-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(3, 8, 19, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .item-title-qty {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .item-qty-tag {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    font: 700 12px var(--mono);
+    padding: 2px 8px;
+    border-radius: 6px;
+  }
+
+  .item-name {
+    font-weight: 700;
+    color: #ffffff;
+    font-size: 14px;
+  }
+
+  .item-status-pill {
+    font: 600 11px var(--mono);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .item-status-pill.prep {
+    color: var(--cyan);
+  }
+
+  .item-status-pill.ready {
+    color: var(--gold-light);
+  }
+
+  .item-status-pill.served {
+    color: #34d399;
+  }
+
+  .poll-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font: 500 11px var(--mono);
+    color: var(--text-dim);
+    margin-top: 16px;
+    justify-content: center;
+  }
+
+  .pulse-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #34d399;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.7); }
+    70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(52, 211, 153, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="tracker-page">
+  <div class="tracker-shell">
+    
+    <div class="tracker-header">
+      <div>
+        <h1>Live Kitchen Tracker</h1>
+        <div style="font: 500 13px var(--mono); color: var(--text-muted); margin-top: 4px;">
+          Table {{ table.table_number }} • Session: {{ session.guest_name }}
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <a href="{% url 'restaurant:table_menu' qr_token=qr_token %}" class="tracker-btn">+ Order More Food</a>
+        <a href="{% url 'restaurant:customer_bill' qr_token=qr_token %}" class="tracker-btn" style="border-color: rgba(243, 194, 113, 0.4); color: var(--gold-light);">💳 View Bill</a>
+      </div>
+    </div>
+
+    <!-- Active Orders List -->
+    <div id="ordersContainer">
+      {% for order in orders %}
+        <div class="order-card" id="order-card-{{ order.id }}">
+          <div class="order-card-header">
+            <div>
+              <div class="order-id-tag">Order #{{ order.id }}</div>
+              <div class="order-meta-info">
+                Placed at {{ order.created_at|date:"h:i A" }} • Source: {{ order.get_source_display }}
+              </div>
+            </div>
+            <span class="badge-status {{ order.status }}">{{ order.get_status_display }}</span>
+          </div>
+
+          {% if order.special_instructions %}
+            <div style="font-size: 13px; color: var(--gold-light); margin-bottom: 12px; background: rgba(243, 194, 113, 0.08); padding: 8px 12px; border-radius: var(--radius-sm);">
+              💬 Notes: {{ order.special_instructions }}
+            </div>
+          {% endif %}
+
+          <div class="items-list">
+            {% for item in order.items.all %}
+              <div class="item-row">
+                <div class="item-title-qty">
+                  <span class="item-qty-tag">{{ item.quantity }}x</span>
+                  <span class="item-name">{{ item.menu_item.name }}</span>
+                </div>
+
+                <div class="item-status-pill {% if item.status == 'PREPARING' %}prep{% elif item.status == 'READY' %}ready{% elif item.status == 'SERVED' %}served{% endif %}">
+                  {% if item.status == 'PREPARING' %}
+                    <span>🔥 Cooking in Kitchen</span>
+                    {% if item.estimated_minutes %}
+                      <span style="color: var(--text-dim);">(~{{ item.estimated_minutes }}m)</span>
+                    {% endif %}
+                  {% elif item.status == 'READY' %}
+                    <span>✨ Ready! Server bringing dish</span>
+                  {% elif item.status == 'SERVED' %}
+                    <span>✓ Served to Table</span>
+                  {% else %}
+                    <span>{{ item.get_status_display }}</span>
+                  {% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      {% empty %}
+        <div style="text-align: center; padding: 70px 20px; background: rgba(9, 23, 44, 0.6); border: 1px dashed var(--border-glass); border-radius: var(--radius-lg);">
+          <h3 style="color: #ffffff; margin-bottom: 12px;">No active orders yet</h3>
+          <p style="color: var(--text-muted); margin-bottom: 24px;">Your order has not been sent to the kitchen yet.</p>
+          <a href="{% url 'restaurant:table_menu' qr_token=qr_token %}" class="button">Explore Curated Menu</a>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="poll-indicator">
+      <span class="pulse-dot"></span>
+      <span>Live kitchen sync active (auto-updates every 10 seconds)</span>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // Periodic polling for status updates
+  setInterval(async () => {
+    try {
+      const res = await fetch("{% url 'restaurant:customer_orders' qr_token=qr_token %}?format=json", {
+        headers: { "X-Requested-With": "XMLHttpRequest" }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Check if any order changed status; reload to sync UI if status count or status updated
+        // Or if session status changed to BILL_PENDING or CLOSED
+      }
+    } catch(err) {
+      console.warn("Polling status update:", err);
+    }
+  }, 10000);
+</script>
+{% endblock %}
+

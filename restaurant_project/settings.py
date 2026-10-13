@@ -1,10 +1,24 @@
+import os
 from pathlib import Path
 import sys
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-SECRET_KEY = "replace-this-with-a-secure-secret-key-before-production"
-DEBUG = True
-ALLOWED_HOSTS = ["*"]
+
+# Load .env file into os.environ if present
+env_file = BASE_DIR / ".env"
+if env_file.exists():
+    with open(env_file, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, val = line.split("=", 1)
+                os.environ.setdefault(key.strip(), val.strip().strip("'\""))
+
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "replace-this-with-a-secure-secret-key-before-production")
+DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")
+
+allowed_hosts_raw = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,*")
+ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_raw.split(",") if h.strip()]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -36,6 +50,7 @@ TEMPLATES = [{
         "django.template.context_processors.request",
         "django.contrib.auth.context_processors.auth",
         "django.contrib.messages.context_processors.messages",
+        "restaurant.context_processors.staff_role_context",
     ]},
 }]
 
@@ -50,14 +65,13 @@ if "test" in sys.argv:
     }
 else:
     DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': 'postgres',
-            'DATABASE': 'postgres',
-            'USER': 'postgres.smurbxgwcwsnzirrpqgh',
-            'PASSWORD': 'Sumanth@999',
-            'HOST': 'aws-0-ap-south-1.pooler.supabase.com',
-            'PORT': '5432',
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": os.getenv("DB_NAME", "postgres"),
+            "USER": os.getenv("DB_USER", "postgres"),
+            "PASSWORD": os.getenv("DB_PASSWORD", ""),
+            "HOST": os.getenv("DB_HOST", "localhost"),
+            "PORT": os.getenv("DB_PORT", "5432"),
         }
     }
 
@@ -83,6 +97,5 @@ LOGIN_URL = "restaurant:login"
 LOGIN_REDIRECT_URL = "restaurant:reservation"
 LOGOUT_REDIRECT_URL = "restaurant:home"
 
-SUPABASE_URL = "https://smurbxgwcwsnzirrpqgh.supabase.co"
-SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNtdXJieGd3Y3dzbnppcnJwcWdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxNjg1NTQsImV4cCI6MjEwNTc0NDU1NH0.WwvPZjEiWpTgxjLAyoATBlMiQ-_sJSIrNYV936uG2nk"
-
+SUPABASE_URL = os.getenv("SUPABASE_URL", "")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
