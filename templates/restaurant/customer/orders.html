@@ -282,21 +282,36 @@
 </div>
 
 <script>
-  // Periodic polling for status updates
-  setInterval(async () => {
+  let lastStateFingerprint = "";
+
+  async function checkOrderStatusUpdates() {
     try {
       const res = await fetch("{% url 'restaurant:customer_orders' qr_token=qr_token %}?format=json", {
         headers: { "X-Requested-With": "XMLHttpRequest" }
       });
       if (res.ok) {
         const data = await res.json();
-        // Check if any order changed status; reload to sync UI if status count or status updated
-        // Or if session status changed to BILL_PENDING or CLOSED
+        // Generate fingerprint combining order statuses, item statuses, and chef cooking estimates
+        let currentFingerprint = (data.orders || []).map(o => {
+          let itemFingerprints = (o.items || []).map(i => `${i.id}:${i.status}:${i.estimated_minutes}`).join(",");
+          return `${o.id}:${o.status}:[${itemFingerprints}]`;
+        }).join("|") + `|session:${data.session_status}`;
+
+        if (lastStateFingerprint && lastStateFingerprint !== currentFingerprint) {
+          // Status or cooking estimate updated by chef/kitchen! Refresh UI
+          window.location.reload();
+        } else {
+          lastStateFingerprint = currentFingerprint;
+        }
       }
     } catch(err) {
       console.warn("Polling status update:", err);
     }
-  }, 10000);
+  }
+
+  // Initial check and 5-second polling for responsive live tracking
+  checkOrderStatusUpdates();
+  setInterval(checkOrderStatusUpdates, 5000);
 </script>
 {% endblock %}
 

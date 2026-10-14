@@ -104,9 +104,15 @@
     </div>
 
     <div style="margin-bottom: 28px;">
-      <span class="eyebrow" style="color: #34d399;">Table {{ session.table.table_number }} • Session #{{ session.id }}</span>
-      <h1 style="font-size: 32px; font-weight: 800; color: #ffffff; margin: 4px 0;">Guest Bill & Checkout</h1>
-      <p style="color: var(--text-secondary); margin: 0;">Party: <b>{{ session.guest_name }}</b> ({{ session.guest_count }} guests)</p>
+      {% if session %}
+        <span class="eyebrow" style="color: #34d399;">Table {{ session.table.table_number }} • Session #{{ session.id }}</span>
+        <h1 style="font-size: 32px; font-weight: 800; color: #ffffff; margin: 4px 0;">Guest Bill & Checkout</h1>
+        <p style="color: var(--text-secondary); margin: 0;">Party: <b>{{ session.guest_name }}</b> ({{ session.guest_count }} guests)</p>
+      {% else %}
+        <span class="eyebrow" style="color: #34d399;">{{ bill.display_title }} • {{ bill.get_order_type_display }}</span>
+        <h1 style="font-size: 32px; font-weight: 800; color: #ffffff; margin: 4px 0;">Direct Counter Bill Checkout</h1>
+        <p style="color: var(--text-secondary); margin: 0;">Customer: <b>{{ bill.display_customer }}</b> {% if bill.customer_phone %}• Tel: {{ bill.customer_phone }}{% endif %}</p>
+      {% endif %}
     </div>
 
     <div class="settle-grid">
@@ -161,7 +167,6 @@
               <span>Gratuity / Tip:</span>
               <span style="color: #ffffff;">+₹{{ bill.tip }}</span>
             </div>
-          </div>
           {% endif %}
           <div class="calc-row total-row">
             <span>Grand Total Due:</span>

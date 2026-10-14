@@ -1,0 +1,231 @@
+{% extends "restaurant/base.html" %}
+{% load static %}
+
+{% block title %}
+  {% if single_mode %}Table {{ primary_table.table_number }} QR Code{% else %}Print Table QR Codes{% endif %} | Food Waves
+{% endblock %}
+
+{% block head %}
+<style>
+  .qr-page {
+    min-height: calc(100vh - 170px);
+    padding: 130px max(5vw, 20px) 90px;
+    background: 
+      radial-gradient(circle at 50% 20%, rgba(6, 182, 212, 0.1), transparent 45%),
+      linear-gradient(180deg, #030813 0%, #061124 50%, #08162b 100%);
+    color: var(--text-primary);
+  }
+
+  .qr-shell {
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+
+  .qr-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-bottom: 1px solid var(--border-glass);
+    padding-bottom: 24px;
+    margin-bottom: 36px;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .qr-header h1 {
+    font-size: clamp(28px, 4vw, 38px);
+    font-weight: 800;
+    margin: 8px 0 0;
+    color: #ffffff;
+  }
+
+  .header-actions {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  /* Grid of QR cards */
+  .qr-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 320px));
+    gap: 28px;
+    justify-content: center;
+  }
+
+  .qr-stand-card {
+    background: #ffffff;
+    color: #030813;
+    border-radius: 16px;
+    padding: 32px 24px;
+    text-align: center;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    border: 3px solid #f3c271;
+  }
+
+  .qr-brand-title {
+    font-family: var(--playfair, serif);
+    font-size: 20px;
+    font-weight: 700;
+    color: #030813;
+    letter-spacing: .08em;
+    margin-bottom: 4px;
+  }
+
+  .qr-brand-sub {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: .12em;
+    margin-bottom: 20px;
+  }
+
+  .table-badge {
+    background: #030813;
+    color: #f3c271;
+    font-family: var(--mono);
+    font-size: 20px;
+    font-weight: 800;
+    padding: 8px 24px;
+    border-radius: 30px;
+    margin-bottom: 20px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .qr-img-wrapper {
+    background: #ffffff;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 16px;
+  }
+
+  .qr-img {
+    width: 190px;
+    height: 190px;
+    display: block;
+  }
+
+  .qr-instructions {
+    font-size: 13px;
+    color: #334155;
+    line-height: 1.5;
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
+
+  .qr-features {
+    font-size: 11px;
+    color: #64748b;
+    font-family: var(--mono);
+    border-top: 1px solid #f1f5f9;
+    padding-top: 12px;
+    width: 100%;
+  }
+
+  /* Print Stylesheet */
+  @media print {
+    body {
+      background: #ffffff !important;
+      color: #000000 !important;
+    }
+    .site-header, .site-footer, .qr-header, .flash-messages, .noise, .mobile-toggle, .drawer-overlay, .mobile-drawer {
+      display: none !important;
+    }
+    .qr-page {
+      padding: 0 !important;
+      background: none !important;
+      min-height: auto !important;
+    }
+    .qr-shell {
+      max-width: 100% !important;
+      margin: 0 !important;
+    }
+    .qr-grid {
+      display: block !important;
+    }
+    .qr-stand-card {
+      page-break-inside: avoid;
+      page-break-after: always;
+      box-shadow: none !important;
+      border: 2px solid #000000 !important;
+      margin: 40px auto !important;
+      max-width: 320px !important;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="qr-page">
+  <div class="qr-shell">
+
+    <!-- Header Actions (Hidden in Print) -->
+    <div class="qr-header">
+      <div>
+        <span class="eyebrow" style="color: var(--cyan);">QR Table Deployment</span>
+        <h1>
+          {% if single_mode %}
+            Table {{ primary_table.table_number }} QR Code
+          {% else %}
+            All Dining Table QR Codes
+          {% endif %}
+        </h1>
+        <p style="color: var(--text-secondary); margin-top: 6px;">
+          Print high-resolution table cards for customer self-ordering via mobile devices.
+        </p>
+      </div>
+
+      <div class="header-actions">
+        <button onclick="window.print();" class="button button-gold">
+          🖨️ Print QR Card{% if not single_mode %}s{% endif %}
+        </button>
+        <a href="{% url 'restaurant:manager_tables_list' %}" class="button button-outline">
+          ← Back to Tables
+        </a>
+      </div>
+    </div>
+
+    <!-- QR Cards Grid -->
+    <div class="qr-grid">
+      {% for item in table_data %}
+        <div class="qr-stand-card">
+          <div class="qr-brand-title">FOOD WAVES</div>
+          <div class="qr-brand-sub">Modern Coastal Dining</div>
+
+          <div class="table-badge">
+            TABLE {{ item.table.table_number }}
+          </div>
+
+          <div class="qr-img-wrapper">
+            <img class="qr-img" src="{{ item.qr_img_url }}" alt="QR Code for Table {{ item.table.table_number }}">
+          </div>
+
+          <div class="qr-instructions">
+            Scan with your phone camera to browse the live menu &amp; order
+          </div>
+
+          <div class="qr-features">
+            Instant Ordering • Live Kitchen Tracking • Split Bills
+          </div>
+
+          <div style="margin-top: 12px; font-size: 10px; color: #94a3b8; font-family: var(--mono); word-break: break-all;">
+            {{ item.table.get_floor_area_display }} • Seats {{ item.table.capacity }}
+          </div>
+        </div>
+      {% empty %}
+        <div style="text-align: center; color: var(--text-muted); padding: 40px;">
+          No active dining tables available.
+        </div>
+      {% endfor %}
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+

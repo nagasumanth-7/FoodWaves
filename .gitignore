@@ -11,4 +11,7 @@ node_modules/
 __MACOSX/
 media/
 staticfiles/
+build/
+dist/
+*.egg-info/
 

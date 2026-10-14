@@ -148,7 +148,10 @@
         <h1>Cashier Checkout</h1>
         <p style="color: var(--text-secondary); margin-top: 6px;">Manage guest bills, process cash / UPI / card payments, and track daily settlement metrics.</p>
       </div>
-      <div>
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <a href="{% url 'restaurant:cashier_direct_bill' %}" class="button" style="background: linear-gradient(135deg, #10b981, #059669); border-color: #34d399; color: #ffffff; font-weight: 700;">
+          ⚡ + New Direct / Counter Bill
+        </a>
         <a href="{% url 'restaurant:cashier_reports' %}" class="button" style="background: rgba(52, 211, 153, 0.15); border-color: rgba(52, 211, 153, 0.35); color: #34d399;">
           📊 Daily Sales Report
         </a>
@@ -186,8 +189,8 @@
         <table class="pos-table">
           <thead>
             <tr>
-              <th>Table</th>
-              <th>Guest Party</th>
+              <th>Order / Table</th>
+              <th>Guest / Party</th>
               <th>Items</th>
               <th>Subtotal</th>
               <th>GST (5%)</th>
@@ -199,14 +202,24 @@
             {% for bill in unpaid_bills %}
               <tr>
                 <td>
-                  <b style="color: #ffffff; font-size: 16px;">Table {{ bill.session.table.table_number }}</b>
-                  <div style="font-size: 11px; color: var(--text-secondary);">Session #{{ bill.session.id }}</div>
+                  {% if bill.session %}
+                    <b style="color: #ffffff; font-size: 16px;">Table {{ bill.session.table.table_number }}</b>
+                    <div style="font-size: 11px; color: var(--text-secondary);">Session #{{ bill.session.id }}</div>
+                  {% else %}
+                    <b style="color: #34d399; font-size: 16px;">{{ bill.display_title }}</b>
+                    <div style="font-size: 11px; color: var(--text-secondary);">{{ bill.get_order_type_display }} (Direct)</div>
+                  {% endif %}
                 </td>
                 <td>
-                  <b style="color: #ffffff;">{{ bill.session.guest_name }}</b>
-                  <div style="font-size: 12px; color: var(--text-secondary);">Waiter: {{ bill.session.waiter.username|default:"Floor Staff" }}</div>
+                  {% if bill.session %}
+                    <b style="color: #ffffff;">{{ bill.session.guest_name }}</b>
+                    <div style="font-size: 12px; color: var(--text-secondary);">Waiter: {{ bill.session.waiter.username|default:"Floor Staff" }}</div>
+                  {% else %}
+                    <b style="color: #ffffff;">{{ bill.display_customer }}</b>
+                    <div style="font-size: 12px; color: var(--text-secondary);">{% if bill.customer_phone %}{{ bill.customer_phone }}{% else %}Counter Customer{% endif %}</div>
+                  {% endif %}
                 </td>
-                <td>{{ bill.session.total_items_count }} items</td>
+                <td>{{ bill.total_items_count }} items</td>
                 <td>₹{{ bill.subtotal }}</td>
                 <td style="color: var(--text-secondary);">₹{{ bill.tax }}</td>
                 <td>

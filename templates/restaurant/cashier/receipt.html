@@ -153,13 +153,18 @@
       <div class="invoice-meta-grid">
         <div>
           <b>Invoice #:</b> FW-BILL-{{ bill.id }}<br>
-          <b>Table:</b> Table {{ session.table.table_number }}<br>
-          <b>Guest:</b> {{ session.guest_name }}
+          {% if session %}
+            <b>Table:</b> Table {{ session.table.table_number }}<br>
+            <b>Guest:</b> {{ session.guest_name }}
+          {% else %}
+            <b>Order:</b> {{ bill.get_order_type_display }} (Direct)<br>
+            <b>Customer:</b> {{ bill.display_customer }}
+          {% endif %}
         </div>
         <div style="text-align: right;">
           <b>Date:</b> {{ bill.created_at|date:"d M Y, h:i A" }}<br>
           <b>Cashier:</b> {{ bill.cashier.username|default:"Front Desk" }}<br>
-          <b>Status:</b> <span style="color: #16a34a; font-weight: 700;">PAID IN FULL</span>
+          <b>Status:</b> <span style="color: #16a34a; font-weight: 700;">{% if bill.status == 'PAID' %}PAID IN FULL{% else %}{{ bill.get_status_display|upper }}{% endif %}</span>
         </div>
       </div>
 

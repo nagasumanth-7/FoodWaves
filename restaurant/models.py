@@ -122,7 +122,7 @@ class MenuCategory(models.Model):
 
 
 class MenuItem(models.Model):
-    category = models.ForeignKey(MenuCategory, on_delete=models.CASCADE, related_name="items")
+    category = models.ForeignKey(MenuCategory, on_delete=models.PROTECT, related_name="items")
     name = models.CharField(max_length=150)
     description = models.TextField(blank=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -209,6 +209,7 @@ class Order(models.Model):
     SOURCE_CHOICES = [
         ("CUSTOMER", "Customer"),
         ("WAITER", "Waiter"),
+        ("CASHIER", "Cashier"),
     ]
 
     STATUS_CHOICES = [
@@ -220,7 +221,8 @@ class Order(models.Model):
         ("CANCELLED", "Cancelled"),
     ]
 
-    session = models.ForeignKey(TableSession, on_delete=models.CASCADE, related_name="orders")
+    session = models.ForeignKey(TableSession, on_delete=models.CASCADE, null=True, blank=True, related_name="orders")
+    bill = models.ForeignKey("Bill", on_delete=models.CASCADE, null=True, blank=True, related_name="orders")
     placed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="placed_orders")
     source = models.CharField(max_length=20, choices=SOURCE_CHOICES, default="CUSTOMER")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="PENDING")
@@ -232,7 +234,8 @@ class Order(models.Model):
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"Order #{self.id} for Session #{self.session_id} [{self.source}] - {self.status}"
+        target = f"Session #{self.session_id}" if self.session_id else f"Bill #{self.bill_id}"
+        return f"Order #{self.id} for {target} [{self.source}] - {self.status}"
 
     @property
     def table_session(self):
@@ -296,6 +299,12 @@ class OrderItem(models.Model):
 
 
 class Bill(models.Model):
+    ORDER_TYPE_CHOICES = [
+        ("DINE_IN", "Dine In"),
+        ("COUNTER", "Counter / Direct"),
+        ("TAKEAWAY", "Takeaway / Parcel"),
+    ]
+
     STATUS_CHOICES = [
         ("OPEN", "Open"),
         ("REQUESTED", "Requested"),
@@ -305,7 +314,10 @@ class Bill(models.Model):
         ("VOID", "Void"),
     ]
 
-    session = models.OneToOneField(TableSession, on_delete=models.CASCADE, related_name="bill")
+    session = models.OneToOneField(TableSession, on_delete=models.CASCADE, null=True, blank=True, related_name="bill")
+    order_type = models.CharField(max_length=20, choices=ORDER_TYPE_CHOICES, default="DINE_IN")
+    customer_name = models.CharField(max_length=150, blank=True)
+    customer_phone = models.CharField(max_length=20, blank=True)
     cashier = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="generated_bills")
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
     tax = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("0.00"))
@@ -319,7 +331,9 @@ class Bill(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"Bill #{self.id} for Table {self.session.table.table_number} - ₹{self.total} ({self.status})"
+        if self.session and hasattr(self.session, "table"):
+            return f"Bill #{self.id} for Table {self.session.table.table_number} - ₹{self.total} ({self.status})"
+        return f"Bill #{self.id} ({self.display_title}) - ₹{self.total} ({self.status})"
 
     @property
     def table_session(self):
@@ -328,6 +342,30 @@ class Bill(models.Model):
     @table_session.setter
     def table_session(self, val):
         self.session = val
+
+    @property
+    def display_title(self):
+        if self.session and hasattr(self.session, "table"):
+            return f"Table {self.session.table.table_number}"
+        return self.get_order_type_display() if hasattr(self, "get_order_type_display") else "Counter / Direct"
+
+    @property
+    def display_customer(self):
+        if self.session and self.session.guest_name:
+            return self.session.guest_name
+        return self.customer_name or "Counter Customer"
+
+    @property
+    def all_orders(self):
+        if self.session:
+            return self.session.orders.exclude(status="CANCELLED")
+        return self.orders.exclude(status="CANCELLED")
+
+    @property
+    def total_items_count(self):
+        if self.session:
+            return self.session.total_items_count
+        return sum(order.items.exclude(status="CANCELLED").count() for order in self.orders.all())
 
 
 class Payment(models.Model):

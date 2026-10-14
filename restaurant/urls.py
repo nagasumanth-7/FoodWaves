@@ -31,6 +31,12 @@ urlpatterns = [
     path("manager/categories/<int:category_id>/edit/", views.manager_category_edit, name="manager_category_edit"),
     path("manager/categories/<int:category_id>/toggle/", views.manager_category_toggle, name="manager_category_toggle"),
     path("manager/staff-roles/", views.manager_staff_roles, name="manager_staff_roles"),
+    path("manager/tables/", views.manager_tables_list, name="manager_tables_list"),
+    path("manager/tables/add/", views.manager_table_add, name="manager_table_add"),
+    path("manager/tables/<int:table_id>/edit/", views.manager_table_edit, name="manager_table_edit"),
+    path("manager/tables/qr/", views.manager_table_qr_view, name="manager_tables_qr_all"),
+    path("manager/tables/<int:table_id>/qr/", views.manager_table_qr_view, name="manager_table_qr_view"),
+    path("manager/tables/<int:table_id>/qr/image/", views.manager_table_qr_image, name="manager_table_qr_image"),
 
     # Customer QR Table Ordering Portal (Sections 2, 10, 14-16, 18)
     path("table/<str:qr_token>/", views.table_menu, name="table_menu"),
@@ -57,6 +63,7 @@ urlpatterns = [
 
     # Cashier POS & Billing Portal
     path("cashier/", views.cashier_dashboard, name="cashier_dashboard"),
+    path("cashier/new-bill/", views.cashier_direct_bill, name="cashier_direct_bill"),
     path("cashier/bill/<int:bill_id>/settle/", views.cashier_settle_bill, name="cashier_settle_bill"),
     path("cashier/table/<int:table_id>/generate-bill/", views.cashier_generate_bill, name="cashier_generate_bill"),
     path("cashier/bill/<int:bill_id>/receipt/", views.cashier_receipt, name="cashier_receipt"),

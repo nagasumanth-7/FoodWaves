@@ -318,4 +318,24 @@ class PaymentProcessForm(forms.Form):
     )
 
 
+class RestaurantTableForm(forms.ModelForm):
+    class Meta:
+        from .models import RestaurantTable
+        model = RestaurantTable
+        fields = ["table_number", "capacity", "floor_area", "status", "is_active"]
+        widgets = {
+            "table_number": forms.TextInput(attrs={"placeholder": "e.g. T-10 or 12", "class": "form-control"}),
+            "capacity": forms.NumberInput(attrs={"min": 1, "max": 50, "class": "form-control"}),
+            "floor_area": forms.Select(attrs={"class": "form-control"}),
+            "status": forms.Select(attrs={"class": "form-control"}),
+            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+        }
+
+    def clean_table_number(self):
+        number = self.cleaned_data.get("table_number", "").strip()
+        if not number:
+            raise forms.ValidationError("Table number is required.")
+        return number
+
+
 

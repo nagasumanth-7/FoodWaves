@@ -12,13 +12,32 @@ if env_file.exists():
             line = line.strip()
             if line and not line.startswith("#") and "=" in line:
                 key, val = line.split("=", 1)
-                os.environ.setdefault(key.strip(), val.strip().strip("'\""))
+                k = key.strip()
+                v = val.strip().strip("'\"")
+                if k not in os.environ or not os.environ[k]:
+                    os.environ[k] = v
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "replace-this-with-a-secure-secret-key-before-production")
-DEBUG = os.getenv("DEBUG", "True").lower() in ("true", "1", "yes")
+DEBUG = os.getenv("DEBUG", "False").lower() in ("true", "1", "yes")
 
-allowed_hosts_raw = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,*")
+allowed_hosts_raw = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1")
 ALLOWED_HOSTS = [h.strip() for h in allowed_hosts_raw.split(",") if h.strip()]
+
+# Production security and HTTPS settings
+if not DEBUG and "test" not in sys.argv:
+    SECURE_SSL_REDIRECT = os.getenv("SECURE_SSL_REDIRECT", "True").lower() in ("true", "1", "yes")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "31536000"))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    X_FRAME_OPTIONS = "DENY"
+
+csrf_trusted_raw = os.getenv("CSRF_TRUSTED_ORIGINS", "")
+if csrf_trusted_raw:
+    CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in csrf_trusted_raw.split(",") if origin.strip()]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -97,5 +116,5 @@ LOGIN_URL = "restaurant:login"
 LOGIN_REDIRECT_URL = "restaurant:reservation"
 LOGOUT_REDIRECT_URL = "restaurant:home"
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "")
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
+SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "").strip()

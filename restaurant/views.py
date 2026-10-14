@@ -1,4 +1,6 @@
+import io
 import json
+import qrcode
 from decimal import Decimal
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout, get_user_model
@@ -11,7 +13,7 @@ from django.conf import settings
 from django.contrib import messages
 from django.urls import reverse
 from django.utils import timezone
-from django.http import JsonResponse, HttpResponseForbidden
+from django.http import JsonResponse, HttpResponseForbidden, HttpResponse
 
 from django.contrib.auth.models import Group
 from django.db.models import Q, Count
@@ -37,11 +39,13 @@ from .forms import (
     ChefAvailabilityForm,
     TableOpenForm,
     PaymentProcessForm,
+    RestaurantTableForm,
 )
 from .supabase_auth import (
     supabase_sign_up,
     supabase_sign_in,
     supabase_resend_confirmation,
+    supabase_sign_out,
 )
 from .permissions import manager_required, chef_required, waiter_required, cashier_required
 from .services.menu_service import (
@@ -74,8 +78,11 @@ from .services.billing_service import (
     calculate_and_generate_bill,
     request_bill_from_customer,
     process_bill_payment,
+    record_payment_failure,
     get_unpaid_bills,
     get_daily_cashier_summary,
+    create_direct_counter_bill,
+    GST_RATE,
 )
 
 User = get_user_model()
@@ -164,93 +171,51 @@ def signup_page(request):
             phone_number = form.cleaned_data["phone_number"].strip()
             password = form.cleaned_data["password"]
 
-            request.session.pop("dev_verify_link", None)
+            # Register user via Supabase Auth API
+            callback_url = request.build_absolute_uri(reverse("restaurant:auth_callback"))
+            success, data, err_msg = supabase_sign_up(
+                email=email,
+                password=password,
+                name=name,
+                phone_number=phone_number,
+                redirect_to=callback_url,
+            )
 
-            # If Supabase Auth is configured, register user with Supabase Auth
-            if getattr(settings, "SUPABASE_ANON_KEY", None):
-                callback_url = request.build_absolute_uri(reverse("restaurant:auth_callback"))
-                success, data, err_msg = supabase_sign_up(
-                    email=email,
-                    password=password,
-                    name=name,
-                    phone_number=phone_number,
-                    redirect_to=callback_url,
+            if not success:
+                messages.error(request, f"Registration failed: {err_msg}")
+                return render(request, "restaurant/signup.html", {"form": form})
+
+            if data and isinstance(data, dict) and data.get("identities") == []:
+                messages.warning(
+                    request,
+                    f"An account with {email} already exists. If your account is not verified, please check your inbox or click 'Resend verification'.",
                 )
-
-                if not success:
-                    messages.error(request, f"Registration failed: {err_msg}")
-                    return render(request, "restaurant/signup.html", {"form": form})
-
-                if data and isinstance(data, dict) and data.get("identities") == []:
-                    messages.warning(
-                        request,
-                        f"An account with {email} already exists. If your account is not verified, please check your inbox or click 'Resend verification'.",
-                    )
-                else:
-                    messages.success(
-                        request,
-                        f"A confirmation email has been dispatched by Supabase to {email}. You must confirm your email before signing in.",
-                    )
-
-                stale_users = User.objects.filter(email__iexact=email, is_active=False)
-                stale_users.delete()
-
-                user, created = User.objects.get_or_create(
-                    username=email,
-                    defaults={"email": email, "first_name": name, "is_active": False},
-                )
-                if not created:
-                    user.first_name = name
-                    user.is_active = False
-                user.set_password(password)
-                user.save()
-
-                profile, _ = UserProfile.objects.get_or_create(user=user)
-                profile.phone_number = phone_number
-                profile.is_email_verified = False
-                profile.save()
-
-                request.session["verification_email"] = email
-                return redirect("restaurant:verification_sent")
             else:
-                # Fallback to local Django token verification
-                stale_users = User.objects.filter(email__iexact=email, is_active=False)
-                stale_users.delete()
-
-                user = User.objects.create_user(
-                    username=email,
-                    email=email,
-                    password=password,
-                    first_name=name,
-                    is_active=False,
+                messages.success(
+                    request,
+                    f"A confirmation email has been dispatched by Supabase to {email}. Please check your inbox and click the verification link to activate your dining account.",
                 )
 
-                UserProfile.objects.create(
-                    user=user,
-                    phone_number=phone_number,
-                    is_email_verified=False,
-                )
+            stale_users = User.objects.filter(email__iexact=email, is_active=False)
+            stale_users.delete()
 
-                uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
-                token = default_token_generator.make_token(user)
-                verify_url = request.build_absolute_uri(
-                    reverse("restaurant:verify_email", kwargs={"uidb64": uidb64, "token": token})
-                )
+            user, created = User.objects.get_or_create(
+                username=email,
+                defaults={"email": email, "first_name": name, "is_active": False},
+            )
+            if not created:
+                user.first_name = name
+                user.is_active = False
+            user.set_password(password)
+            user.save()
 
-                try:
-                    send_mail(
-                        subject="Verify your email - Food Waves",
-                        message=f"Hello {name},\n\nPlease verify your email:\n{verify_url}\n\nWarm regards,\nFood Waves Team",
-                        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "Food Waves <noreply@foodwaves.com>"),
-                        recipient_list=[email],
-                        fail_silently=False,
-                    )
-                except Exception as e:
-                    print(f"[FoodWaves Mail Error] {e}")
+            profile, _ = UserProfile.objects.get_or_create(user=user)
+            profile.phone_number = phone_number
+            profile.is_email_verified = False
+            profile.save()
 
-                request.session["verification_email"] = email
-                messages.info(request, f"We sent a verification link to {email}.")
-                return redirect("restaurant:verification_sent")
+            request.session["verification_email"] = email
+            return redirect("restaurant:verification_sent")
     else:
         form = SignUpForm()
 
@@ -258,7 +223,6 @@ def signup_page(request):
 
 
 def verification_sent(request):
-    request.session.pop("dev_verify_link", None)
     email = request.session.get("verification_email", "")
     return render(
         request,
@@ -281,9 +245,7 @@ def verify_email(request, uidb64, token):
         profile.is_email_verified = True
         profile.save()
 
-        request.session.pop("dev_verify_link", None)
         request.session.pop("verification_email", None)
-
         messages.success(request, "Your email has been verified! You can now log in.")
         return render(request, "restaurant/verify_email.html", {"success": True, "user": user})
     else:
@@ -294,35 +256,12 @@ def resend_verification(request):
     email = request.POST.get("email") or request.GET.get("email") or request.session.get("verification_email")
     if email:
         email = email.strip().lower()
-
-        if getattr(settings, "SUPABASE_ANON_KEY", None):
-            callback_url = request.build_absolute_uri(reverse("restaurant:auth_callback"))
-            success, err_msg = supabase_resend_confirmation(email, redirect_to=callback_url)
-            if success:
-                messages.success(request, f"A new confirmation email has been dispatched by Supabase to {email}.")
-            else:
-                messages.error(request, f"Resend failed: {err_msg}")
+        callback_url = request.build_absolute_uri(reverse("restaurant:auth_callback"))
+        success, err_msg = supabase_resend_confirmation(email, redirect_to=callback_url)
+        if success:
+            messages.success(request, f"A new confirmation email has been dispatched by Supabase to {email}.")
         else:
-            user = User.objects.filter(email__iexact=email, is_active=False).first()
-            if user:
-                uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
-                token = default_token_generator.make_token(user)
-                verify_url = request.build_absolute_uri(
-                    reverse("restaurant:verify_email", kwargs={"uidb64": uidb64, "token": token})
-                )
-                try:
-                    send_mail(
-                        subject="Verify your email - Food Waves",
-                        message=f"Hello,\n\nPlease verify your email:\n{verify_url}",
-                        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "Food Waves <noreply@foodwaves.com>"),
-                        recipient_list=[email],
-                        fail_silently=False,
-                    )
-                except Exception as e:
-                    print(f"[FoodWaves Mail Error] {e}")
-                messages.success(request, f"A new verification link has been sent to {email}.")
-            else:
-                messages.info(request, "If an inactive account exists, a link has been sent.")
+            messages.error(request, f"Resend failed: {err_msg}")
     else:
         messages.error(request, "Please provide an email address to resend the verification link.")
 
@@ -330,8 +269,20 @@ def resend_verification(request):
 
 
 def auth_callback(request):
-    """Callback endpoint triggered when user clicks the Supabase email confirmation link."""
-    messages.success(request, "Your email address has been confirmed! Please sign in to continue.")
+    """
+    Callback endpoint triggered when user clicks the Supabase email confirmation link.
+    Supabase verifies the token and redirects the browser here.
+    """
+    error = request.GET.get("error") or request.GET.get("error_code")
+    error_desc = request.GET.get("error_description")
+    if error or error_desc:
+        messages.error(
+            request,
+            f"Email confirmation failed: {error_desc or error}. Please request a new confirmation email.",
+        )
+        return redirect("restaurant:verification_sent")
+
+    messages.success(request, "Your email address has been confirmed! Please sign in with your password to continue.")
     return redirect("restaurant:login")
 
 
@@ -417,84 +368,58 @@ def login_page(request):
                 messages.success(request, f"Welcome back, {local_user.first_name or local_user.username}!")
                 return redirect(get_user_home_url(local_user, next_url=next_url))
 
-            # Supabase Auth Authentication
-            if getattr(settings, "SUPABASE_ANON_KEY", None):
-                success, data_or_code, err_msg = supabase_sign_in(email, password)
+            # Supabase Auth Authentication for Customer Accounts
+            success, data_or_code, err_msg = supabase_sign_in(email, password)
 
-                if not success:
-                    if data_or_code == "email_not_confirmed":
-                        unverified_email = email
-                        messages.warning(
-                            request,
-                            "Email confirmation required: Users must confirm their email address before signing in for the first time. Please check your inbox for the confirmation link sent by Supabase.",
-                        )
-                        return render(
-                            request,
-                            "restaurant/login.html",
-                            {"form": form, "next": next_url, "unverified_email": unverified_email},
-                        )
-                    else:
-                        messages.error(request, err_msg or "Invalid email or password. Please try again.")
-                        return render(
-                            request,
-                            "restaurant/login.html",
-                            {"form": form, "next": next_url},
-                        )
-
-                supabase_user = data_or_code.get("user", {})
-                user_meta = supabase_user.get("user_metadata", {})
-                name = user_meta.get("name") or ""
-                phone = user_meta.get("phone_number") or ""
-
-                django_user, created = User.objects.get_or_create(
-                    username=email,
-                    defaults={"email": email, "first_name": name, "is_active": True},
-                )
-                django_user.is_active = True
-                if name and not django_user.first_name:
-                    django_user.first_name = name
-                django_user.set_password(password)
-                django_user.save()
-
-                profile, _ = UserProfile.objects.get_or_create(user=django_user)
-                profile.is_email_verified = True
-                if phone and not profile.phone_number:
-                    profile.phone_number = phone
-                profile.save()
-
-                login(request, django_user, backend="django.contrib.auth.backends.ModelBackend")
-                request.session["supabase_token"] = data_or_code.get("access_token")
-
-                if not remember_me:
-                    request.session.set_expiry(0)
-
-                messages.success(request, f"Welcome back, {django_user.first_name or django_user.email}!")
-                return redirect(get_user_home_url(django_user, next_url=next_url))
-
-            else:
-                # Fallback to local Django authentication
-                inactive_user = User.objects.filter(email__iexact=email, is_active=False).first()
-                if inactive_user and inactive_user.check_password(password):
+            if not success:
+                if data_or_code == "email_not_confirmed":
                     unverified_email = email
                     messages.warning(
                         request,
-                        "Your email address is not verified yet. Please check your inbox or resend the verification link below.",
+                        "Email confirmation required: Users must confirm their email address before signing in for the first time. Please check your inbox for the confirmation link sent by Supabase.",
                     )
                     return render(
                         request,
                         "restaurant/login.html",
                         {"form": form, "next": next_url, "unverified_email": unverified_email},
                     )
-
-                user = authenticate(request, email=email, password=password)
-                if user is not None:
-                    login(request, user)
-                    if not remember_me:
-                        request.session.set_expiry(0)
-                    messages.success(request, f"Welcome back, {user.first_name or user.email}!")
-                    return redirect(get_user_home_url(user, next_url=next_url))
                 else:
-                    messages.error(request, "Invalid email or password. Please try again.")
+                    messages.error(request, err_msg or "Invalid email or password. Please try again.")
+                    return render(
+                        request,
+                        "restaurant/login.html",
+                        {"form": form, "next": next_url},
+                    )
+
+            supabase_user = data_or_code.get("user", {})
+            user_meta = supabase_user.get("user_metadata", {})
+            name = user_meta.get("name") or ""
+            phone = user_meta.get("phone_number") or ""
+
+            django_user, created = User.objects.get_or_create(
+                username=email,
+                defaults={"email": email, "first_name": name, "is_active": True},
+            )
+            django_user.is_active = True
+            if name and not django_user.first_name:
+                django_user.first_name = name
+            django_user.set_password(password)
+            django_user.save()
+
+            profile, _ = UserProfile.objects.get_or_create(user=django_user)
+            profile.is_email_verified = True
+            if phone and not profile.phone_number:
+                profile.phone_number = phone
+            profile.save()
+
+            login(request, django_user, backend="django.contrib.auth.backends.ModelBackend")
+            request.session["supabase_token"] = data_or_code.get("access_token")
+
+            if not remember_me:
+                request.session.set_expiry(0)
+
+            messages.success(request, f"Welcome back, {django_user.first_name or django_user.email}!")
+            return redirect(get_user_home_url(django_user, next_url=next_url))
     else:
         form = LoginForm()
 
@@ -506,6 +431,12 @@ def login_page(request):
 
 
 def logout_view(request):
+    token = request.session.get("supabase_token")
+    if token:
+        try:
+            supabase_sign_out(token)
+        except Exception:
+            pass
     logout(request)
     request.session.flush()
     messages.info(request, "You have been logged out successfully.")
@@ -1073,14 +1004,151 @@ def cashier_dashboard(request):
 
 
 @cashier_required
+def cashier_direct_bill(request):
+    """
+    Cashier Direct / Counter Billing:
+    Allows cashier to select dishes from the menu, specify quantities,
+    customer details, order type (COUNTER / TAKEAWAY), apply discounts or tips,
+    and either generate an unpaid bill or immediately settle payment (Cash, UPI, Card).
+    """
+    if request.method == "POST":
+        items_data = []
+        is_ajax = (
+            request.headers.get("x-requested-with") == "XMLHttpRequest"
+            or request.content_type == "application/json"
+        )
+
+        customer_name = "Counter Guest"
+        customer_phone = ""
+        order_type = "COUNTER"
+        discount_pct = Decimal("0.00")
+        tip_amount = Decimal("0.00")
+        instructions = ""
+        settle_immediately = False
+        payment_method = "CASH"
+        transaction_id = ""
+
+        if request.content_type == "application/json" or (request.body and request.body.startswith(b"{")):
+            try:
+                payload = json.loads(request.body.decode("utf-8"))
+                items_data = payload.get("items", [])
+                customer_name = payload.get("customer_name", "Counter Guest")
+                customer_phone = payload.get("customer_phone", "")
+                order_type = payload.get("order_type", "COUNTER")
+                discount_pct = Decimal(str(payload.get("discount_pct", 0) or 0))
+                tip_amount = Decimal(str(payload.get("tip_amount", 0) or 0))
+                instructions = payload.get("instructions", "")
+                settle_immediately = bool(payload.get("settle_immediately", False))
+                payment_method = payload.get("payment_method", "CASH")
+                transaction_id = payload.get("transaction_id", "")
+            except Exception as e:
+                return JsonResponse({"status": "error", "message": f"Invalid JSON payload: {e}"}, status=400)
+        else:
+            customer_name = request.POST.get("customer_name", "Counter Guest").strip() or "Counter Guest"
+            customer_phone = request.POST.get("customer_phone", "").strip()
+            order_type = request.POST.get("order_type", "COUNTER")
+            instructions = request.POST.get("instructions", "").strip()
+            action = request.POST.get("action", "generate")
+            settle_immediately = (action == "settle" or request.POST.get("settle_immediately") == "1")
+            payment_method = request.POST.get("payment_method", "CASH")
+            transaction_id = request.POST.get("transaction_id", "").strip()
+
+            try:
+                discount_pct = Decimal(request.POST.get("discount_pct") or "0.00")
+            except Exception:
+                discount_pct = Decimal("0.00")
+
+            try:
+                tip_amount = Decimal(request.POST.get("tip_amount") or "0.00")
+            except Exception:
+                tip_amount = Decimal("0.00")
+
+            cart_json = request.POST.get("cart_data", "")
+            if cart_json:
+                try:
+                    items_data = json.loads(cart_json)
+                except Exception:
+                    pass
+
+            if not items_data:
+                for key, val in request.POST.items():
+                    if key.startswith("qty_") and val:
+                        try:
+                            qty = int(val)
+                            if qty > 0:
+                                item_id = int(key.replace("qty_", ""))
+                                notes = request.POST.get(f"notes_{item_id}", "").strip()
+                                items_data.append({"item_id": item_id, "quantity": qty, "notes": notes})
+                        except ValueError:
+                            pass
+
+        if not items_data:
+            if is_ajax:
+                return JsonResponse({"status": "error", "message": "Please add at least one item to generate a bill."}, status=400)
+            messages.error(request, "Please add at least one item to generate a bill.")
+            return redirect("restaurant:cashier_direct_bill")
+
+        try:
+            bill = create_direct_counter_bill(
+                items_data=items_data,
+                cashier_user=request.user,
+                customer_name=customer_name,
+                customer_phone=customer_phone,
+                order_type=order_type,
+                discount_pct=discount_pct,
+                tip_amount=tip_amount,
+                instructions=instructions,
+                settle_immediately=settle_immediately,
+                payment_method=payment_method,
+                transaction_id=transaction_id,
+            )
+
+            if settle_immediately:
+                msg = f"Direct bill #{bill.id} settled via {payment_method}! Total: ₹{bill.total}"
+                messages.success(request, msg)
+                redirect_target = reverse("restaurant:cashier_receipt", kwargs={"bill_id": bill.id})
+            else:
+                msg = f"Direct bill #{bill.id} generated for {bill.display_customer}! Total: ₹{bill.total}"
+                messages.success(request, msg)
+                redirect_target = reverse("restaurant:cashier_settle_bill", kwargs={"bill_id": bill.id})
+
+            if is_ajax:
+                return JsonResponse({
+                    "status": "success",
+                    "bill_id": bill.id,
+                    "message": msg,
+                    "redirect_url": redirect_target,
+                })
+            return redirect(redirect_target)
+
+        except Exception as e:
+            if is_ajax:
+                return JsonResponse({"status": "error", "message": str(e)}, status=400)
+            messages.error(request, f"Error generating direct bill: {e}")
+            return redirect("restaurant:cashier_direct_bill")
+
+    categories = get_active_categories()
+    items = get_active_menu_items()
+    return render(
+        request,
+        "restaurant/cashier/direct_bill.html",
+        {
+            "categories": categories,
+            "items": items,
+        },
+    )
+
+
+@cashier_required
 def cashier_settle_bill(request, bill_id):
     """
     Cashier Checkout & Settlement:
     Calculates 5% GST, discounts, tips, and records payments (Cash, UPI, Card).
+    Supports both table session bills and direct counter bills.
     """
-    bill = get_object_or_404(Bill.objects.select_related("session__table", "session__waiter"), pk=bill_id)
+    bill = get_object_or_404(Bill.objects.select_related("session__table", "session__waiter", "cashier"), pk=bill_id)
     session = bill.session
-    orders = session.orders.prefetch_related("items__menu_item").exclude(status="CANCELLED")
+    orders = bill.all_orders
 
     if request.method == "POST":
         form = PaymentProcessForm(request.POST)
@@ -1091,13 +1159,27 @@ def cashier_settle_bill(request, bill_id):
             tip_amount = form.cleaned_data.get("tip_amount") or Decimal("0.00")
             tx_id = form.cleaned_data.get("transaction_id", "")
 
-            # Re-generate bill if discount or tip adjusted
-            bill = calculate_and_generate_bill(
-                session=session,
-                cashier=request.user,
-                discount_pct=discount_pct,
-                tip_amount=tip_amount,
-            )
+            if session:
+                # Re-generate table bill if discount or tip adjusted
+                bill = calculate_and_generate_bill(
+                    session=session,
+                    cashier=request.user,
+                    discount_pct=discount_pct,
+                    tip_amount=tip_amount,
+                )
+            else:
+                # Direct counter bill: update discount/tip/tax/total on bill
+                subtotal = bill.subtotal
+                discount_amount = (subtotal * (discount_pct / Decimal("100.00"))).quantize(Decimal("0.01"))
+                taxable_amount = max(Decimal("0.00"), subtotal - discount_amount)
+                tax_amount = (taxable_amount * GST_RATE).quantize(Decimal("0.01"))
+                total_amount = (taxable_amount + tax_amount + tip_amount).quantize(Decimal("0.01"))
+                bill.discount = discount_amount
+                bill.tax = tax_amount
+                bill.tip = tip_amount
+                bill.total = total_amount
+                bill.cashier = request.user
+                bill.save(update_fields=["discount", "tax", "tip", "total", "cashier", "updated_at"])
 
             try:
                 payment = process_bill_payment(
@@ -1107,7 +1189,10 @@ def cashier_settle_bill(request, bill_id):
                     transaction_id=tx_id,
                     processed_by=request.user,
                 )
-                messages.success(request, f"Payment of ₹{payment.amount} settled via {payment.get_payment_method_display()}! Table {session.table.table_number} is now Available.")
+                if session:
+                    messages.success(request, f"Payment of ₹{payment.amount} settled via {payment.get_payment_method_display()}! Table {session.table.table_number} is now Available.")
+                else:
+                    messages.success(request, f"Payment of ₹{payment.amount} settled via {payment.get_payment_method_display()} for {bill.display_title}!")
                 return redirect("restaurant:cashier_receipt", bill_id=bill.id)
             except Exception as e:
                 messages.error(request, f"Payment error: {e}")
@@ -1159,7 +1244,7 @@ def cashier_receipt(request, bill_id):
     bill = get_object_or_404(Bill.objects.select_related("session__table", "session__waiter", "cashier"), pk=bill_id)
     payments = bill.payments.all()
     session = bill.session
-    orders = session.orders.prefetch_related("items__menu_item").exclude(status="CANCELLED")
+    orders = bill.all_orders
 
     return render(
         request,
@@ -1297,9 +1382,13 @@ def customer_cart(request, qr_token):
     Review items in order before submitting to kitchen.
     """
     table = get_table_by_qr_token(qr_token)
-    session = get_active_session_for_table(table.id)
+    session = TableSession.objects.filter(table=table, status="ACTIVE").first()
     if not session:
-        session = get_or_create_active_session(table, customer=request.user if request.user.is_authenticated else None)
+        try:
+            session = get_or_create_active_session(table, customer=request.user if request.user.is_authenticated else None)
+        except Exception as e:
+            messages.error(request, str(e))
+            return redirect("restaurant:table_menu", qr_token=qr_token)
 
     return render(
         request,
@@ -1322,9 +1411,15 @@ def customer_place_order(request, qr_token):
         return redirect("restaurant:table_menu", qr_token=qr_token)
 
     table = get_table_by_qr_token(qr_token)
-    session = get_active_session_for_table(table.id)
+    session = TableSession.objects.filter(table=table, status="ACTIVE").first()
     if not session:
-        session = get_or_create_active_session(table, customer=request.user if request.user.is_authenticated else None)
+        try:
+            session = get_or_create_active_session(table, customer=request.user if request.user.is_authenticated else None)
+        except Exception as e:
+            if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.content_type == "application/json":
+                return JsonResponse({"status": "error", "message": str(e)}, status=400)
+            messages.error(request, str(e))
+            return redirect("restaurant:table_menu", qr_token=qr_token)
 
     items_data = []
     instructions = ""
@@ -1385,7 +1480,7 @@ def customer_orders(request, qr_token):
     and estimated cooking times.
     """
     table = get_table_by_qr_token(qr_token)
-    session = get_active_session_for_table(table.id)
+    session = TableSession.objects.filter(table=table, status__in=["ACTIVE", "BILL_PENDING"]).first()
     if not session:
         messages.info(request, "No active dining session found.")
         return redirect("restaurant:table_menu", qr_token=qr_token)
@@ -1433,7 +1528,7 @@ def customer_bill(request, qr_token):
     Allows requesting the bill to notify floor waiter and cashier.
     """
     table = get_table_by_qr_token(qr_token)
-    session = get_active_session_for_table(table.id)
+    session = TableSession.objects.filter(table=table, status__in=["ACTIVE", "BILL_PENDING"]).first()
     if not session:
         messages.info(request, "No active dining session found.")
         return redirect("restaurant:table_menu", qr_token=qr_token)
@@ -1466,7 +1561,7 @@ def customer_request_bill(request, qr_token):
         return redirect("restaurant:customer_bill", qr_token=qr_token)
 
     table = get_table_by_qr_token(qr_token)
-    session = get_active_session_for_table(table.id)
+    session = TableSession.objects.filter(table=table, status__in=["ACTIVE", "BILL_PENDING"]).first()
     if not session:
         messages.error(request, "No active session for this table.")
         return redirect("restaurant:table_menu", qr_token=qr_token)
@@ -1621,4 +1716,152 @@ def manager_staff_roles(request):
             "search_q": search_q,
         },
     )
+
+
+# ==============================================================================
+# MANAGER TABLE & QR CODE MANAGEMENT (Section 4)
+# ==============================================================================
+
+@manager_required
+def manager_tables_list(request):
+    """
+    Manager Tables List:
+    Displays all dining tables, seating capacity, active session status,
+    and links to generate or print QR codes.
+    """
+    tables = RestaurantTable.objects.prefetch_related("sessions").order_by("table_number")
+    total_count = tables.count()
+    active_count = tables.filter(is_active=True).count()
+    occupied_count = tables.filter(status="OCCUPIED").count()
+    bill_pending_count = tables.filter(status="BILL_PENDING").count()
+
+    return render(
+        request,
+        "restaurant/manager/tables_list.html",
+        {
+            "tables": tables,
+            "total_count": total_count,
+            "active_count": active_count,
+            "occupied_count": occupied_count,
+            "bill_pending_count": bill_pending_count,
+        },
+    )
+
+
+@manager_required
+def manager_table_add(request):
+    """
+    Manager Add Dining Table:
+    Creates a new table with automatically generated unique QR token.
+    """
+    if request.method == "POST":
+        form = RestaurantTableForm(request.POST)
+        if form.is_valid():
+            table = form.save()
+            messages.success(request, f"Table {table.table_number} added successfully.")
+            return redirect("restaurant:manager_tables_list")
+    else:
+        form = RestaurantTableForm()
+
+    return render(
+        request,
+        "restaurant/manager/table_form.html",
+        {
+            "form": form,
+            "title": "Add New Dining Table",
+            "button_text": "Create Table",
+        },
+    )
+
+
+@manager_required
+def manager_table_edit(request, table_id):
+    """
+    Manager Edit Dining Table:
+    Updates table capacity, area, status, and active state.
+    """
+    table = get_object_or_404(RestaurantTable, pk=table_id)
+    if request.method == "POST":
+        form = RestaurantTableForm(request.POST, instance=table)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"Table {table.table_number} updated successfully.")
+            return redirect("restaurant:manager_tables_list")
+    else:
+        form = RestaurantTableForm(instance=table)
+
+    return render(
+        request,
+        "restaurant/manager/table_form.html",
+        {
+            "form": form,
+            "table": table,
+            "title": f"Edit Table {table.table_number}",
+            "button_text": "Save Changes",
+        },
+    )
+
+
+@manager_required
+def manager_table_qr_view(request, table_id=None):
+    """
+    Manager Table QR Display & Print View (Section 4):
+    Displays high-resolution QR codes with print styling for a single table
+    or all active tables for table-top stands and cards.
+    """
+    if table_id:
+        table = get_object_or_404(RestaurantTable, pk=table_id)
+        tables = [table]
+        single_mode = True
+    else:
+        tables = list(RestaurantTable.objects.filter(is_active=True).order_by("table_number"))
+        single_mode = False
+
+    table_data = []
+    for t in tables:
+        menu_url = request.build_absolute_uri(
+            reverse("restaurant:table_menu", kwargs={"qr_token": t.qr_token})
+        )
+        qr_img_url = reverse("restaurant:manager_table_qr_image", kwargs={"table_id": t.id})
+        table_data.append({
+            "table": t,
+            "menu_url": menu_url,
+            "qr_img_url": qr_img_url,
+        })
+
+    return render(
+        request,
+        "restaurant/manager/table_qr.html",
+        {
+            "table_data": table_data,
+            "single_mode": single_mode,
+            "primary_table": tables[0] if single_mode and tables else None,
+        },
+    )
+
+
+@manager_required
+def manager_table_qr_image(request, table_id):
+    """
+    Streams a dynamically generated PNG QR code image for a table.
+    The QR code embeds the absolute URL to the customer table ordering route.
+    """
+    table = get_object_or_404(RestaurantTable, pk=table_id)
+    target_url = request.build_absolute_uri(
+        reverse("restaurant:table_menu", kwargs={"qr_token": table.qr_token})
+    )
+
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=10,
+        border=3,
+    )
+    qr.add_data(target_url)
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="#030813", back_color="#ffffff")
+    buffer = io.BytesIO()
+    img.save(buffer, format="PNG")
+    return HttpResponse(buffer.getvalue(), content_type="image/png")
 

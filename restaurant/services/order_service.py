@@ -53,8 +53,8 @@ def create_order_for_session(session, items_data, placed_by=None, source="CUSTOM
     if not items_data:
         raise ValidationError("Cannot place an empty order. Select at least one item.")
 
-    if session.status not in ["ACTIVE", "BILL_PENDING"]:
-        raise ValidationError("Cannot place orders for an inactive table session.")
+    if session.status != "ACTIVE":
+        raise ValidationError("Cannot place orders for an inactive or closed table session.")
 
     with transaction.atomic():
         # 1. Validate all items before persisting any database changes
@@ -75,9 +75,7 @@ def create_order_for_session(session, items_data, placed_by=None, source="CUSTOM
             special_instructions=instructions.strip(),
         )
 
-        now = timezone.now()
-
-        # 3. Create OrderItems with frozen unit_price (Section 14)
+        # 3. Create OrderItems with frozen unit_price from DB and initial PENDING status
         for menu_item, qty, notes in validated_items:
             prep_est = menu_item.preparation_time or 15
             OrderItem.objects.create(
@@ -86,10 +84,10 @@ def create_order_for_session(session, items_data, placed_by=None, source="CUSTOM
                 quantity=qty,
                 unit_price=menu_item.price,
                 special_instructions=notes,
-                status="PREPARING",
-                started_at=now,
+                status="PENDING",
+                started_at=None,
                 estimated_minutes=prep_est,
-                estimated_ready_at=now + datetime.timedelta(minutes=prep_est),
+                estimated_ready_at=None,
             )
 
         return order
@@ -147,8 +145,12 @@ def update_order_item_status(order_item_id, new_status, updated_by=None, estimat
             item.estimated_minutes = mins
             item.estimated_ready_at = now + datetime.timedelta(minutes=mins)
 
-        if new_status == "PREPARING" and not item.started_at:
-            item.started_at = now
+        if new_status == "PREPARING":
+            if not item.started_at:
+                item.started_at = now
+            if not item.estimated_ready_at:
+                est = item.estimated_minutes or 15
+                item.estimated_ready_at = now + datetime.timedelta(minutes=est)
         elif new_status == "READY":
             item.ready_at = now
         elif new_status == "SERVED":
@@ -158,15 +160,21 @@ def update_order_item_status(order_item_id, new_status, updated_by=None, estimat
 
         # Update parent order status based on remaining items
         parent_order = item.order
-        remaining_unserved = parent_order.items.exclude(status__in=["SERVED", "CANCELLED"]).exists()
-        if not remaining_unserved:
+        all_items = list(parent_order.items.all())
+        if all(i.status == "CANCELLED" for i in all_items):
+            parent_order.status = "CANCELLED"
+            parent_order.save(update_fields=["status"])
+        elif all(i.status in ["SERVED", "CANCELLED"] for i in all_items) and any(i.status == "SERVED" for i in all_items):
             parent_order.status = "SERVED"
             parent_order.save(update_fields=["status"])
-        elif parent_order.items.filter(status="READY").exists():
+        elif any(i.status == "READY" for i in all_items):
             parent_order.status = "READY"
             parent_order.save(update_fields=["status"])
-        elif parent_order.items.filter(status="PREPARING").exists():
+        elif any(i.status == "PREPARING" for i in all_items):
             parent_order.status = "PREPARING"
+            parent_order.save(update_fields=["status"])
+        elif any(i.status == "PENDING" for i in all_items):
+            parent_order.status = "ACCEPTED"
             parent_order.save(update_fields=["status"])
 
         return item

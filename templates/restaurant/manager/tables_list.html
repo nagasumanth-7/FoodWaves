@@ -1,0 +1,258 @@
+{% extends "restaurant/base.html" %}
+{% load static %}
+
+{% block title %}Dining Tables & QR Codes | Manager Portal{% endblock %}
+
+{% block head %}
+<style>
+  .manager-shell {
+    min-height: calc(100vh - 170px);
+    padding: 140px max(6vw, 24px) 90px;
+    background: 
+      radial-gradient(circle at 85% 15%, rgba(6, 182, 212, 0.12), transparent 45%),
+      linear-gradient(180deg, #030813 0%, #061124 50%, #08162b 100%);
+    color: var(--text-primary);
+  }
+
+  .manager-container {
+    max-width: 1200px;
+    margin: auto;
+  }
+
+  .portal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 24px;
+    flex-wrap: wrap;
+    margin-bottom: 36px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border-glass);
+  }
+
+  .portal-header h1 {
+    margin: 8px 0 0;
+    font-size: clamp(30px, 4vw, 42px);
+    font-weight: 800;
+    color: #ffffff;
+  }
+
+  .portal-nav {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+
+  .stat-card {
+    background: rgba(9, 23, 44, 0.75);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-md);
+    padding: 20px;
+  }
+
+  .stat-value {
+    font-size: 32px;
+    font-weight: 800;
+    font-family: var(--mono);
+    color: #ffffff;
+    margin-top: 4px;
+  }
+
+  .table-card {
+    background: rgba(9, 23, 44, 0.75);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+  }
+
+  .custom-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    text-align: left;
+  }
+
+  .custom-table th {
+    padding: 16px 20px;
+    background: rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid var(--border-glass);
+    color: var(--text-muted);
+    font-family: var(--mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+
+  .custom-table td {
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    vertical-align: middle;
+  }
+
+  .status-pill {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font: 700 11px var(--mono);
+    text-transform: uppercase;
+  }
+
+  .pill-AVAILABLE { background: rgba(52, 211, 153, 0.15); color: #34d399; }
+  .pill-OCCUPIED { background: rgba(96, 165, 250, 0.15); color: #60a5fa; }
+  .pill-BILL_PENDING { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+  .pill-RESERVED { background: rgba(167, 139, 250, 0.15); color: #a78bfa; }
+  .pill-OUT_OF_SERVICE { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+
+  .actions-cell {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .btn-sm-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font: 600 12px var(--manrope);
+    text-decoration: none;
+    border: 1px solid var(--border-glass);
+    background: rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+    transition: all .2s;
+  }
+
+  .btn-sm-action:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: var(--cyan);
+  }
+
+  .btn-sm-gold {
+    background: rgba(243, 194, 113, 0.15);
+    border-color: rgba(243, 194, 113, 0.35);
+    color: var(--gold-light);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="manager-shell">
+  <div class="manager-container">
+
+    <!-- Header -->
+    <div class="portal-header">
+      <div>
+        <span class="eyebrow">Manager Control Center</span>
+        <h1>Dining Tables & QR Codes</h1>
+        <p style="color: var(--text-secondary); margin-top: 6px;">
+          Configure restaurant dining tables, monitor real-time statuses, and generate printable customer QR ordering codes.
+        </p>
+      </div>
+
+      <div class="portal-nav">
+        <a class="button button-gold" href="{% url 'restaurant:manager_table_add' %}">+ Add Dining Table</a>
+        <a class="button button-outline" href="{% url 'restaurant:manager_tables_qr_all' %}">🖨️ Print All Table QRs</a>
+        <a class="button button-outline" href="{% url 'restaurant:manager_dashboard' %}">← Dashboard</a>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div style="font-size: 12px; font-family: var(--mono); color: var(--text-muted);">TOTAL DINING TABLES</div>
+        <div class="stat-value">{{ total_count }}</div>
+      </div>
+      <div class="stat-card">
+        <div style="font-size: 12px; font-family: var(--mono); color: #34d399;">ACTIVE TABLES</div>
+        <div class="stat-value" style="color: #34d399;">{{ active_count }}</div>
+      </div>
+      <div class="stat-card">
+        <div style="font-size: 12px; font-family: var(--mono); color: #60a5fa;">CURRENTLY OCCUPIED</div>
+        <div class="stat-value" style="color: #60a5fa;">{{ occupied_count }}</div>
+      </div>
+      <div class="stat-card">
+        <div style="font-size: 12px; font-family: var(--mono); color: #fbbf24;">BILL PENDING</div>
+        <div class="stat-value" style="color: #fbbf24;">{{ bill_pending_count }}</div>
+      </div>
+    </div>
+
+    <!-- Tables Table -->
+    <div class="table-card">
+      <table class="custom-table">
+        <thead>
+          <tr>
+            <th>Table</th>
+            <th>Capacity</th>
+            <th>Floor Area</th>
+            <th>Live Status</th>
+            <th>Active Session</th>
+            <th>Status</th>
+            <th style="text-align: right;">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in tables %}
+            <tr>
+              <td>
+                <div style="font-weight: 800; font-size: 16px; color: #ffffff;">Table {{ t.table_number }}</div>
+                <div style="font-size: 11px; font-family: var(--mono); color: var(--text-dim);">Token: {{ t.qr_token|slice:":8" }}...</div>
+              </td>
+              <td>{{ t.capacity }} Guests</td>
+              <td>{{ t.get_floor_area_display }}</td>
+              <td>
+                <span class="status-pill pill-{{ t.status }}">{{ t.get_status_display }}</span>
+              </td>
+              <td>
+                {% if t.current_session %}
+                  <span style="color: var(--cyan); font-weight: 600;">Session #{{ t.current_session.id }}</span>
+                  <div style="font-size: 12px; color: var(--text-muted);">₹{{ t.current_session.running_subtotal }}</div>
+                {% else %}
+                  <span style="color: var(--text-dim);">No active session</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if t.is_active %}
+                  <span style="color: #34d399; font-weight: 600; font-size: 12px;">Active</span>
+                {% else %}
+                  <span style="color: var(--text-dim); font-size: 12px;">Inactive</span>
+                {% endif %}
+              </td>
+              <td>
+                <div class="actions-cell" style="justify-content: flex-end;">
+                  <a href="{% url 'restaurant:manager_table_qr_view' t.id %}" class="btn-sm-action btn-sm-gold">
+                    📱 QR Code
+                  </a>
+                  <a href="{% url 'restaurant:manager_table_edit' t.id %}" class="btn-sm-action">
+                    Edit
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% empty %}
+            <tr>
+              <td colspan="7" style="text-align: center; padding: 48px; color: var(--text-muted);">
+                No dining tables configured yet.
+                <div style="margin-top: 12px;">
+                  <a href="{% url 'restaurant:manager_table_add' %}" class="button button-gold">+ Add Table</a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+

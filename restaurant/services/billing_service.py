@@ -33,7 +33,14 @@ def calculate_and_generate_bill(session, cashier=None, discount_pct=Decimal("0.0
         tip_dec = Decimal(str(tip_amount)).quantize(Decimal("0.01"))
         total_amount = (taxable_amount + tax_amount + tip_dec).quantize(Decimal("0.01"))
 
-        target_status = bill_status if bill_status else "OPEN"
+        valid_bill_statuses = {"OPEN", "REQUESTED", "UNPAID", "PAID", "CANCELLED", "VOID"}
+        if bill_status and bill_status in valid_bill_statuses:
+            target_status = bill_status
+        elif bill_status == "BILL_PENDING":
+            # Map legacy/erroneous BILL_PENDING argument to REQUESTED for Bill
+            target_status = "REQUESTED"
+        else:
+            target_status = "OPEN"
 
         bill, created = Bill.objects.select_for_update().get_or_create(
             session=locked_session,
@@ -54,17 +61,21 @@ def calculate_and_generate_bill(session, cashier=None, discount_pct=Decimal("0.0
             bill.discount = discount_amount
             bill.tip = tip_dec
             bill.total = total_amount
-            if bill_status:
-                bill.status = bill_status
+            if target_status and target_status != "OPEN":
+                bill.status = target_status
             if cashier and not bill.cashier:
                 bill.cashier = cashier
             bill.save()
 
-        # Update table status to BILL_PENDING if requested or unbilled
+        # Update table and session status to BILL_PENDING only when bill is actually requested
         table = locked_session.table
-        if bill_status in ["REQUESTED", "BILL_PENDING"] or table.status != "BILL_PENDING":
-            table.status = "BILL_PENDING"
-            table.save(update_fields=["status"])
+        if target_status in ["REQUESTED", "UNPAID"]:
+            if table.status != "BILL_PENDING":
+                table.status = "BILL_PENDING"
+                table.save(update_fields=["status"])
+            if locked_session.status == "ACTIVE":
+                locked_session.status = "BILL_PENDING"
+                locked_session.save(update_fields=["status"])
 
         return bill
 
@@ -126,18 +137,147 @@ def process_bill_payment(bill, payment_method, amount_paid, transaction_id="", p
             locked_bill.cashier = processed_by
         locked_bill.save(update_fields=["status", "paid_at", "cashier"])
 
-        # 4. Close the TableSession (Section 22)
-        session = TableSession.objects.select_for_update().get(pk=locked_bill.session_id)
-        session.status = "CLOSED"
-        session.closed_at = now
-        session.save(update_fields=["status", "closed_at"])
+        # 4. Close the TableSession if table-based (Section 22)
+        if locked_bill.session_id:
+            session = TableSession.objects.select_for_update().get(pk=locked_bill.session_id)
+            session.status = "CLOSED"
+            session.closed_at = now
+            session.save(update_fields=["status", "closed_at"])
 
-        # 5. Free Table back to AVAILABLE
-        table = RestaurantTable.objects.select_for_update().get(pk=session.table_id)
-        table.status = "AVAILABLE"
-        table.save(update_fields=["status"])
+            # 5. Free Table back to AVAILABLE
+            table = RestaurantTable.objects.select_for_update().get(pk=session.table_id)
+            table.status = "AVAILABLE"
+            table.save(update_fields=["status"])
 
         return payment
+
+
+def create_direct_counter_bill(
+    items_data,
+    cashier_user,
+    customer_name="Counter Guest",
+    customer_phone="",
+    order_type="COUNTER",
+    discount_pct=Decimal("0.00"),
+    tip_amount=Decimal("0.00"),
+    instructions="",
+    settle_immediately=False,
+    payment_method="CASH",
+    transaction_id="",
+):
+    """
+    Cashier Direct Non-Table Billing:
+    Allows cashier to select items, enter quantities, and immediately generate a bill
+    without requiring a dining table or table session.
+    Calculates item prices from database, 5% GST, discounts, and optional tip.
+    """
+    if not items_data:
+        raise ValidationError("Cannot create a bill with no items selected.")
+
+    from ..models import MenuItem, Order, OrderItem
+    from .menu_service import validate_menu_item_availability
+
+    with transaction.atomic():
+        # 1. Server-side validation of items & prices
+        validated_items = []
+        subtotal = Decimal("0.00")
+        for entry in items_data:
+            item_id = entry.get("item_id")
+            qty = int(entry.get("quantity", 1))
+            notes = entry.get("notes", "").strip()
+            if qty <= 0:
+                continue
+            try:
+                item = MenuItem.objects.get(pk=item_id)
+            except MenuItem.DoesNotExist:
+                raise ValidationError(f"Menu item #{item_id} does not exist.")
+
+            is_valid, msg = validate_menu_item_availability(item)
+            if not is_valid:
+                raise ValidationError(msg)
+
+            line_subtotal = item.price * qty
+            subtotal += line_subtotal
+            validated_items.append((item, qty, item.price, notes))
+
+        if not validated_items:
+            raise ValidationError("Please select at least one valid item with quantity greater than 0.")
+
+        # 2. Financial computations
+        disc_pct_dec = Decimal(str(discount_pct or 0))
+        discount_amount = (subtotal * (disc_pct_dec / Decimal("100.00"))).quantize(Decimal("0.01"))
+        taxable_amount = max(Decimal("0.00"), subtotal - discount_amount)
+        tax_amount = (taxable_amount * GST_RATE).quantize(Decimal("0.01"))
+        tip_dec = Decimal(str(tip_amount or 0)).quantize(Decimal("0.01"))
+        total_amount = (taxable_amount + tax_amount + tip_dec).quantize(Decimal("0.01"))
+
+        # 3. Create Bill record
+        bill = Bill.objects.create(
+            session=None,
+            order_type=order_type,
+            customer_name=customer_name.strip() or "Counter Guest",
+            customer_phone=customer_phone.strip(),
+            cashier=cashier_user,
+            subtotal=subtotal,
+            tax=tax_amount,
+            discount=discount_amount,
+            tip=tip_dec,
+            total=total_amount,
+            status="UNPAID",
+        )
+
+        # 4. Create Order record linked directly to Bill
+        order = Order.objects.create(
+            session=None,
+            bill=bill,
+            placed_by=cashier_user,
+            source="CASHIER",
+            status="SERVED",
+            special_instructions=instructions.strip(),
+        )
+
+        now = timezone.now()
+        for menu_item, qty, unit_price, notes in validated_items:
+            OrderItem.objects.create(
+                order=order,
+                menu_item=menu_item,
+                quantity=qty,
+                unit_price=unit_price,
+                special_instructions=notes,
+                status="SERVED",
+                started_at=now,
+                ready_at=now,
+                served_at=now,
+            )
+
+        # 5. If immediate settlement requested (e.g. counter walk-in pays right away)
+        if settle_immediately:
+            process_bill_payment(
+                bill=bill,
+                payment_method=payment_method,
+                amount_paid=total_amount,
+                transaction_id=transaction_id,
+                processed_by=cashier_user,
+            )
+            bill.refresh_from_db()
+
+        return bill
+
+
+def record_payment_failure(bill, payment_method, amount, reason="", processed_by=None):
+    """
+    Records a failed payment attempt while keeping the bill, session, and table open.
+    """
+    now = timezone.now()
+    return Payment.objects.create(
+        bill=bill,
+        amount=Decimal(str(amount)),
+        payment_method=payment_method,
+        status="FAILED",
+        transaction_id=reason.strip(),
+        processed_by=processed_by,
+        paid_at=now,
+    )
 
 
 def get_unpaid_bills():

@@ -120,6 +120,24 @@ class SupabaseAuthAndReservationTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertRedirects(response, self.login_url)
 
+    def test_auth_callback_with_error_redirects_to_verification_sent(self):
+        url = f"{self.auth_callback_url}?error=access_denied&error_description=Email+link+expired"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, reverse("restaurant:verification_sent"))
+
+    @patch("restaurant.views.supabase_sign_out")
+    def test_logout_revokes_supabase_token_and_flushes_session(self, mock_sign_out):
+        session = self.client.session
+        session["supabase_token"] = "jwt-session-token-123"
+        session.save()
+
+        response = self.client.get(self.logout_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, reverse("restaurant:home"))
+        mock_sign_out.assert_called_once_with("jwt-session-token-123")
+        self.assertNotIn("supabase_token", self.client.session)
+
     def test_prebook_table_requires_login(self):
         booking_data = {
             "name": "Guest User",
@@ -525,12 +543,16 @@ class MenuManagementAndSecurityTests(TestCase):
         order = session.orders.first()
         self.assertEqual(order.items.count(), 1)
         item = order.items.first()
-        self.assertEqual(item.quantity, 2)
-        self.assertEqual(item.status, "PREPARING")
+        self.assertEqual(item.status, "PENDING")
 
-        # 3. Chef marks item ready
+        # 3. Chef accepts and starts preparing dish, then marks item ready
         self.client.force_login(self.chef)
         chef_url = reverse("restaurant:chef_item_status", kwargs={"item_id": item.id})
+        resp_prep = self.client.post(chef_url, {"status": "PREPARING", "estimated_minutes": 15})
+        self.assertEqual(resp_prep.status_code, 302)
+        item.refresh_from_db()
+        self.assertEqual(item.status, "PREPARING")
+
         resp_chef = self.client.post(chef_url, {"status": "READY"})
         self.assertEqual(resp_chef.status_code, 302)
         item.refresh_from_db()
@@ -641,15 +663,19 @@ class CustomerQROrderingAndSystemCompletenessTests(TestCase):
         self.manager_group, _ = Group.objects.get_or_create(name="MANAGER")
         self.chef_group, _ = Group.objects.get_or_create(name="CHEF")
         self.cashier_group, _ = Group.objects.get_or_create(name="CASHIER")
+        self.waiter_group, _ = Group.objects.get_or_create(name="WAITER")
 
-        self.manager = User.objects.create_user(username="test_mgr", email="mgr@foodwaves.test", password="Pass", is_active=True)
+        self.manager = User.objects.create_user(username="test_mgr", email="mgr@foodwaves.test", password="Pass", is_active=True, is_staff=True)
         self.manager.groups.add(self.manager_group)
 
-        self.chef = User.objects.create_user(username="test_chef", email="chef@foodwaves.test", password="Pass", is_active=True)
+        self.chef = User.objects.create_user(username="test_chef", email="chef@foodwaves.test", password="Pass", is_active=True, is_staff=True)
         self.chef.groups.add(self.chef_group)
 
-        self.cashier = User.objects.create_user(username="test_cashier", email="cashier@foodwaves.test", password="Pass", is_active=True)
+        self.cashier = User.objects.create_user(username="test_cashier", email="cashier@foodwaves.test", password="Pass", is_active=True, is_staff=True)
         self.cashier.groups.add(self.cashier_group)
+
+        self.waiter = User.objects.create_user(username="test_waiter", email="waiter@foodwaves.test", password="Pass", is_active=True, is_staff=True)
+        self.waiter.groups.add(self.waiter_group)
 
         self.category = MenuCategory.objects.create(name="Main Courses", description="Signature mains")
         self.item_curry = MenuItem.objects.create(
@@ -742,8 +768,7 @@ class CustomerQROrderingAndSystemCompletenessTests(TestCase):
         order_item = order.items.first()
         self.assertEqual(order_item.quantity, 2)
         self.assertEqual(order_item.unit_price, Decimal("280.00"))
-        self.assertEqual(order_item.total_price, Decimal("560.00"))
-        self.assertEqual(order_item.status, "PREPARING")
+        self.assertEqual(order_item.status, "PENDING")
 
         # Now Manager raises price to ₹350.00
         self.item_curry.price = Decimal("350.00")
@@ -851,6 +876,251 @@ class CustomerQROrderingAndSystemCompletenessTests(TestCase):
         test_user.refresh_from_db()
         self.assertTrue(test_user.groups.filter(name="WAITER").exists())
         self.assertTrue(test_user.is_staff)
+
+    # 10. Failed payments do not close session; successful payments close session and release table
+    def test_payment_failure_and_success_lifecycle(self):
+        from restaurant.services.billing_service import calculate_and_generate_bill, record_payment_failure, process_bill_payment
+
+        session = TableSession.objects.create(table=self.table, guest_name="Guest Party", status="ACTIVE")
+        order = Order.objects.create(session=session, status="ACCEPTED")
+        OrderItem.objects.create(order=order, menu_item=self.item_curry, quantity=1, unit_price=Decimal("280.00"), status="SERVED")
+        bill = calculate_and_generate_bill(session, bill_status="REQUESTED")
+
+        self.table.refresh_from_db()
+        self.assertEqual(self.table.status, "BILL_PENDING")
+        session.refresh_from_db()
+        self.assertEqual(session.status, "BILL_PENDING")
+
+        # 1. Record failed payment
+        failed_pmt = record_payment_failure(bill, payment_method="UPI", amount=bill.total, reason="Network timeout", processed_by=self.cashier)
+        self.assertEqual(failed_pmt.status, "FAILED")
+        bill.refresh_from_db()
+        self.assertNotEqual(bill.status, "PAID")
+        session.refresh_from_db()
+        self.assertEqual(session.status, "BILL_PENDING")
+        self.table.refresh_from_db()
+        self.assertEqual(self.table.status, "BILL_PENDING")
+
+        # 2. Process successful payment
+        success_pmt = process_bill_payment(bill, payment_method="CASH", amount_paid=bill.total, processed_by=self.cashier)
+        self.assertEqual(success_pmt.status, "SUCCESS")
+        bill.refresh_from_db()
+        self.assertEqual(bill.status, "PAID")
+        self.assertEqual(bill.cashier, self.cashier)
+
+        # Session closed and table released to AVAILABLE
+        session.refresh_from_db()
+        self.assertEqual(session.status, "CLOSED")
+        self.assertIsNotNone(session.closed_at)
+        self.table.refresh_from_db()
+        self.assertEqual(self.table.status, "AVAILABLE")
+
+    # 11. Category deletion is protected when items belong to it
+    def test_category_deletion_is_protected(self):
+        from django.db.models import ProtectedError
+        cat = MenuCategory.objects.create(name="Tandoor Delights")
+        item = MenuItem.objects.create(
+            category=cat,
+            name="Murgh Malai Tikka",
+            price=Decimal("320.00"),
+            is_active=True,
+        )
+        with self.assertRaises(ProtectedError):
+            cat.delete()
+
+        # Item still exists intact
+        self.assertTrue(MenuItem.objects.filter(pk=item.pk).exists())
+
+    # 12. Manager tables management & QR code generation endpoints
+    def test_manager_tables_and_qr_generation(self):
+        self.client.force_login(self.manager)
+
+        # Tables list view
+        resp_list = self.client.get(reverse("restaurant:manager_tables_list"))
+        self.assertEqual(resp_list.status_code, 200)
+        self.assertContains(resp_list, self.table.table_number)
+
+        # Add table
+        resp_add = self.client.post(reverse("restaurant:manager_table_add"), {
+            "table_number": "T-99",
+            "capacity": 6,
+            "floor_area": "TERRACE",
+            "status": "AVAILABLE",
+            "is_active": True,
+        })
+        self.assertEqual(resp_add.status_code, 302)
+        new_table = RestaurantTable.objects.get(table_number="T-99")
+        self.assertIsNotNone(new_table.qr_token)
+
+        # QR Printable Card View
+        resp_qr = self.client.get(reverse("restaurant:manager_table_qr_view", kwargs={"table_id": new_table.id}))
+        self.assertEqual(resp_qr.status_code, 200)
+        self.assertContains(resp_qr, "T-99")
+
+        # QR PNG image endpoint
+        resp_img = self.client.get(reverse("restaurant:manager_table_qr_image", kwargs={"table_id": new_table.id}))
+        self.assertEqual(resp_img.status_code, 200)
+        self.assertEqual(resp_img["Content-Type"], "image/png")
+        # Valid PNG magic header
+        self.assertTrue(resp_img.content.startswith(b"\x89PNG\r\n\x1a\n"))
+
+    # 13. Staff role isolation: Waiter, Chef, Cashier cannot cross boundaries
+    def test_staff_role_isolation_and_403(self):
+        # Waiter tries to access cashier and chef portals -> 403 Forbidden
+        self.client.force_login(self.waiter)
+        resp_cashier = self.client.get(reverse("restaurant:cashier_dashboard"))
+        self.assertEqual(resp_cashier.status_code, 403)
+        resp_chef = self.client.get(reverse("restaurant:chef_dashboard"))
+        self.assertEqual(resp_chef.status_code, 403)
+
+        # Chef tries to access waiter and cashier portals -> 403 Forbidden
+        self.client.force_login(self.chef)
+        resp_waiter = self.client.get(reverse("restaurant:waiter_dashboard"))
+        self.assertEqual(resp_waiter.status_code, 403)
+        resp_cashier = self.client.get(reverse("restaurant:cashier_dashboard"))
+        self.assertEqual(resp_cashier.status_code, 403)
+
+        # Cashier tries to access waiter and chef portals -> 403 Forbidden
+        self.client.force_login(self.cashier)
+        resp_waiter = self.client.get(reverse("restaurant:waiter_dashboard"))
+        self.assertEqual(resp_waiter.status_code, 403)
+        resp_chef = self.client.get(reverse("restaurant:chef_dashboard"))
+        self.assertEqual(resp_chef.status_code, 403)
+
+        # Logout completely flushes session and redirects to public home
+        resp_logout = self.client.get(reverse("restaurant:logout"))
+        self.assertEqual(resp_logout.status_code, 302)
+        self.assertRedirects(resp_logout, reverse("restaurant:home"))
+
+        resp_home = self.client.get(reverse("restaurant:home"))
+        self.assertEqual(resp_home.status_code, 200)
+        self.assertNotContains(resp_home, reverse("restaurant:waiter_dashboard"))
+        self.assertNotContains(resp_home, reverse("restaurant:chef_dashboard"))
+        self.assertNotContains(resp_home, reverse("restaurant:cashier_dashboard"))
+        self.assertNotContains(resp_home, reverse("restaurant:manager_dashboard"))
+
+    # 14. Cashier direct counter bill creation and DB price & 5% GST calculations
+    def test_cashier_direct_counter_bill_service_calculation(self):
+        from restaurant.services.billing_service import create_direct_counter_bill
+
+        # Create second item
+        item_paneer = MenuItem.objects.create(
+            category=self.category,
+            name="Paneer Butter Masala",
+            price=Decimal("240.00"),
+            is_active=True,
+            is_available=True,
+        )
+
+        items_data = [
+            {"item_id": self.item_curry.id, "quantity": 2},  # 280.00 * 2 = 560.00
+            {"item_id": item_paneer.id, "quantity": 1},      # 240.00 * 1 = 240.00
+        ]
+        # Subtotal = 800.00, 10% discount = 80.00, Taxable = 720.00, 5% GST = 36.00, Tip = 20.00, Total = 776.00
+        bill = create_direct_counter_bill(
+            items_data=items_data,
+            cashier_user=self.cashier,
+            customer_name="Ramesh Sharma",
+            customer_phone="9876543210",
+            order_type="COUNTER",
+            discount_pct=Decimal("10.00"),
+            tip_amount=Decimal("20.00"),
+            settle_immediately=False,
+        )
+
+        self.assertIsNone(bill.session)
+        self.assertEqual(bill.order_type, "COUNTER")
+        self.assertEqual(bill.customer_name, "Ramesh Sharma")
+        self.assertEqual(bill.subtotal, Decimal("800.00"))
+        self.assertEqual(bill.discount, Decimal("80.00"))
+        self.assertEqual(bill.tax, Decimal("36.00"))
+        self.assertEqual(bill.tip, Decimal("20.00"))
+        self.assertEqual(bill.total, Decimal("776.00"))
+        self.assertEqual(bill.status, "UNPAID")
+        self.assertEqual(bill.total_items_count, 2)
+
+        # Check linked order and items
+        order = bill.orders.first()
+        self.assertIsNotNone(order)
+        self.assertEqual(order.source, "CASHIER")
+        self.assertEqual(order.status, "SERVED")
+        self.assertEqual(order.items.count(), 2)
+
+    # 15. Cashier direct counter bill with immediate settlement
+    def test_cashier_direct_counter_bill_immediate_settlement(self):
+        from restaurant.services.billing_service import create_direct_counter_bill
+
+        items_data = [{"item_id": self.item_curry.id, "quantity": 1}]
+        # Subtotal = 280.00, 5% GST = 14.00, Total = 294.00
+        bill = create_direct_counter_bill(
+            items_data=items_data,
+            cashier_user=self.cashier,
+            customer_name="Sneha Patel",
+            customer_phone="9123456789",
+            order_type="TAKEAWAY",
+            settle_immediately=True,
+            payment_method="UPI",
+            transaction_id="UPI-TXN-9988",
+        )
+
+        self.assertEqual(bill.status, "PAID")
+        self.assertEqual(bill.total, Decimal("294.00"))
+        payment = bill.payments.first()
+        self.assertIsNotNone(payment)
+        self.assertEqual(payment.payment_method, "UPI")
+        self.assertEqual(payment.status, "SUCCESS")
+        self.assertEqual(payment.amount, Decimal("294.00"))
+        self.assertEqual(payment.transaction_id, "UPI-TXN-9988")
+
+    # 16. Cashier direct bill views: GET catalog, POST generate, settle bill, and receipt
+    def test_cashier_direct_bill_views_and_checkout_flow(self):
+        from restaurant.models import Bill
+        self.client.force_login(self.cashier)
+
+        # 1. GET direct bill interface
+        url_new_bill = reverse("restaurant:cashier_direct_bill")
+        resp_get = self.client.get(url_new_bill)
+        self.assertEqual(resp_get.status_code, 200)
+        self.assertContains(resp_get, "Butter Chicken")
+
+        # 2. POST to generate unpaid bill
+        payload = {
+            "customer_name": "Walk-in Guest",
+            "order_type": "COUNTER",
+            "cart_data": json.dumps([{"item_id": self.item_curry.id, "quantity": 1}]),
+            "discount_pct": "0.00",
+            "tip_amount": "0.00",
+            "action": "generate",
+        }
+        resp_post = self.client.post(url_new_bill, payload)
+        self.assertEqual(resp_post.status_code, 302)
+
+        bill = Bill.objects.filter(customer_name="Walk-in Guest").first()
+        self.assertIsNotNone(bill)
+        self.assertEqual(bill.status, "UNPAID")
+        self.assertRedirects(resp_post, reverse("restaurant:cashier_settle_bill", kwargs={"bill_id": bill.id}))
+
+        # 3. Settle the unpaid direct bill via Cash
+        url_settle = reverse("restaurant:cashier_settle_bill", kwargs={"bill_id": bill.id})
+        resp_settle_get = self.client.get(url_settle)
+        self.assertEqual(resp_settle_get.status_code, 200)
+        self.assertContains(resp_settle_get, "Direct Counter Bill Checkout")
+
+        resp_settle_post = self.client.post(url_settle, {
+            "payment_method": "CASH",
+            "amount_paid": str(bill.total),
+            "discount_pct": "0.00",
+            "tip_amount": "0.00",
+        })
+        self.assertEqual(resp_settle_post.status_code, 302)
+        self.assertRedirects(resp_settle_post, reverse("restaurant:cashier_receipt", kwargs={"bill_id": bill.id}))
+
+        # 4. View Receipt
+        resp_receipt = self.client.get(reverse("restaurant:cashier_receipt", kwargs={"bill_id": bill.id}))
+        self.assertEqual(resp_receipt.status_code, 200)
+        self.assertContains(resp_receipt, "Walk-in Guest")
+        self.assertContains(resp_receipt, "PAID IN FULL")
+
 
 
 

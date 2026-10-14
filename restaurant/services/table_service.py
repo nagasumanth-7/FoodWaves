@@ -2,7 +2,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from ..models import RestaurantTable, TableSession, Reservation
+from ..models import RestaurantTable, TableSession, Reservation, Bill
 
 
 def get_all_tables(status_filter=None, area_filter=None):
@@ -38,6 +38,7 @@ def get_or_create_active_session(table, customer=None, guest_name=None, guest_co
     Section 4 & 39: Thread-safe, atomic retrieval or creation of a TableSession.
     Uses select_for_update() on RestaurantTable to eliminate race conditions
     when multiple customers scan the same table QR code simultaneously.
+    Prevents opening new sessions if the previous session has an unpaid bill.
     """
     with transaction.atomic():
         # Lock table record during session check/creation
@@ -52,9 +53,30 @@ def get_or_create_active_session(table, customer=None, guest_name=None, guest_co
                 existing_session.save(update_fields=["customer"])
             return existing_session
 
-        # 2. If table is OUT_OF_SERVICE, reject session creation
+        # 2. Prevent opening a new session while the previous session still has unpaid bills or pending settlement
+        unsettled_session = TableSession.objects.filter(
+            table=locked_table,
+            status="BILL_PENDING",
+        ).first()
+        if not unsettled_session:
+            unsettled_bill = Bill.objects.filter(
+                session__table=locked_table,
+                status__in=["OPEN", "REQUESTED", "UNPAID"],
+            ).select_related("session").first()
+            if unsettled_bill:
+                unsettled_session = unsettled_bill.session
+
+        if unsettled_session:
+            raise ValidationError(
+                f"Cannot open a new session for Table {locked_table.table_number}. "
+                f"Previous session #{unsettled_session.id} has an unsettled bill."
+            )
+
+        # 3. If table is OUT_OF_SERVICE or BILL_PENDING, reject session creation
         if locked_table.status == "OUT_OF_SERVICE":
             raise ValidationError(f"Table {locked_table.table_number} is currently out of service.")
+        if locked_table.status == "BILL_PENDING":
+            raise ValidationError(f"Table {locked_table.table_number} is currently awaiting bill settlement.")
 
         # 3. Create a new active session
         name = (guest_name or "").strip()
@@ -101,11 +123,12 @@ def close_table_session(session):
     Uses transaction.atomic() to guarantee synchronized state changes.
     """
     with transaction.atomic():
-        session.status = "CLOSED"
-        session.closed_at = timezone.now()
-        session.save(update_fields=["status", "closed_at"])
+        locked_session = TableSession.objects.select_for_update().get(pk=session.pk)
+        locked_session.status = "CLOSED"
+        locked_session.closed_at = timezone.now()
+        locked_session.save(update_fields=["status", "closed_at"])
 
-        table = RestaurantTable.objects.select_for_update().get(pk=session.table_id)
+        table = RestaurantTable.objects.select_for_update().get(pk=locked_session.table_id)
         table.status = "AVAILABLE"
         table.save(update_fields=["status"])
 
