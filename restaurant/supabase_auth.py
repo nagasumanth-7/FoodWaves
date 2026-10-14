@@ -44,22 +44,41 @@ def supabase_sign_up(email, password, name, phone_number, redirect_to=None):
     req = urllib.request.Request(url, data=data_bytes, headers=_get_headers(), method="POST")
 
     try:
-        with urllib.request.urlopen(req, timeout=12) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             return True, data, None
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8")
         try:
             err_data = json.loads(error_body)
-            msg = (
+            raw_msg = (
                 err_data.get("msg")
                 or err_data.get("message")
                 or err_data.get("error_description")
                 or f"Sign up failed (HTTP {e.code})."
             )
+            err_code = (err_data.get("error_code") or err_data.get("code") or "").lower()
+            if "error sending confirmation email" in raw_msg.lower() or err_code == "unexpected_failure":
+                msg = (
+                    "Error sending confirmation email: Supabase could not deliver the confirmation email. "
+                    "This occurs when custom SMTP credentials in the Supabase Dashboard (Authentication -> SMTP Provider) "
+                    "are rejected or timeout (e.g. Gmail requires a 16-character Google App Password, port 587 TLS, and matching sender address), "
+                    "or when the Supabase default email rate limit is exceeded."
+                )
+            else:
+                msg = raw_msg
         except Exception:
             msg = f"HTTP Error {e.code}: {e.reason}"
         return False, None, msg
+    except urllib.error.URLError as e:
+        if "timed out" in str(e).lower():
+            return (
+                False,
+                None,
+                "The authentication request to Supabase timed out while attempting to dispatch the confirmation email. "
+                "Please verify your SMTP settings in the Supabase Project Dashboard.",
+            )
+        return False, None, str(e)
     except Exception as e:
         return False, None, str(e)
 
@@ -135,16 +154,33 @@ def supabase_resend_confirmation(email, redirect_to=None):
     req = urllib.request.Request(url, data=data_bytes, headers=_get_headers(), method="POST")
 
     try:
-        with urllib.request.urlopen(req, timeout=12) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:
             return True, None
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8")
         try:
             err_data = json.loads(error_body)
-            msg = err_data.get("msg") or err_data.get("message") or err_data.get("error_description") or "Resend failed."
+            raw_msg = (
+                err_data.get("msg")
+                or err_data.get("message")
+                or err_data.get("error_description")
+                or "Resend failed."
+            )
+            err_code = (err_data.get("error_code") or err_data.get("code") or "").lower()
+            if "error sending confirmation email" in raw_msg.lower() or err_code == "unexpected_failure":
+                msg = (
+                    "Error sending confirmation email: Supabase could not deliver the email. "
+                    "Please check your Supabase SMTP settings or rate limits."
+                )
+            else:
+                msg = raw_msg
         except Exception:
             msg = f"HTTP Error {e.code}"
         return False, msg
+    except urllib.error.URLError as e:
+        if "timed out" in str(e).lower():
+            return False, "The resend request timed out while contacting the SMTP server. Please check your Supabase SMTP settings."
+        return False, str(e)
     except Exception as e:
         return False, str(e)
 

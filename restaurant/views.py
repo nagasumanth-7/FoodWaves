@@ -185,17 +185,6 @@ def signup_page(request):
                 messages.error(request, f"Registration failed: {err_msg}")
                 return render(request, "restaurant/signup.html", {"form": form})
 
-            if data and isinstance(data, dict) and data.get("identities") == []:
-                messages.warning(
-                    request,
-                    f"An account with {email} already exists. If your account is not verified, please check your inbox or click 'Resend verification'.",
-                )
-            else:
-                messages.success(
-                    request,
-                    f"A confirmation email has been dispatched by Supabase to {email}. Please check your inbox and click the verification link to activate your dining account.",
-                )
-
             stale_users = User.objects.filter(email__iexact=email, is_active=False)
             stale_users.delete()
 
@@ -213,6 +202,50 @@ def signup_page(request):
             profile.phone_number = phone_number
             profile.is_email_verified = False
             profile.save()
+
+            # Check if Supabase sent confirmation or if confirmation was bypassed in Supabase
+            if data and isinstance(data, dict) and data.get("identities") == []:
+                messages.warning(
+                    request,
+                    f"An account with {email} already exists. If your account is not verified, please check your inbox or click 'Resend verification'.",
+                )
+            elif data and isinstance(data, dict) and data.get("confirmed_at"):
+                # Supabase created the user with confirmed_at (email confirmation disabled in Supabase).
+                # Send verification email via Django so customer still must verify email before dining access.
+                uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+                token = default_token_generator.make_token(user)
+                verify_url = request.build_absolute_uri(
+                    reverse("restaurant:verify_email", kwargs={"uidb64": uidb64, "token": token})
+                )
+                try:
+                    send_mail(
+                        subject="Verify your Food Waves Account",
+                        message=(
+                            f"Hello {name or 'Food Waves Guest'},\n\n"
+                            f"Thank you for creating an account with Food Waves Luxury Dining.\n\n"
+                            f"Please click the link below to verify your email address:\n"
+                            f"{verify_url}\n\n"
+                            f"Warm regards,\nFood Waves Team"
+                        ),
+                        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "Food Waves <noreply@foodwaves.com>"),
+                        recipient_list=[email],
+                        fail_silently=False,
+                    )
+                    messages.success(
+                        request,
+                        f"A verification link has been dispatched to {email}. Please check your inbox to activate your dining account.",
+                    )
+                except Exception as mail_err:
+                    messages.warning(
+                        request,
+                        f"Account created successfully, but sending verification email encountered an issue: {mail_err}. "
+                        "You can resend verification or check your mail server configuration.",
+                    )
+            else:
+                messages.success(
+                    request,
+                    f"A confirmation email has been dispatched by Supabase to {email}. Please check your inbox and click the verification link to activate your dining account.",
+                )
 
             request.session["verification_email"] = email
             return redirect("restaurant:verification_sent")
@@ -261,7 +294,32 @@ def resend_verification(request):
         if success:
             messages.success(request, f"A new confirmation email has been dispatched by Supabase to {email}.")
         else:
-            messages.error(request, f"Resend failed: {err_msg}")
+            # Fallback to Django mail verification if user exists locally
+            user = User.objects.filter(email__iexact=email, is_active=False).first()
+            if user:
+                uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
+                token = default_token_generator.make_token(user)
+                verify_url = request.build_absolute_uri(
+                    reverse("restaurant:verify_email", kwargs={"uidb64": uidb64, "token": token})
+                )
+                try:
+                    send_mail(
+                        subject="Verify your Food Waves Account",
+                        message=(
+                            f"Hello {user.first_name or 'Food Waves Guest'},\n\n"
+                            f"Here is your requested email verification link:\n"
+                            f"{verify_url}\n\n"
+                            f"Warm regards,\nFood Waves Team"
+                        ),
+                        from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "Food Waves <noreply@foodwaves.com>"),
+                        recipient_list=[email],
+                        fail_silently=False,
+                    )
+                    messages.success(request, f"A new verification link has been sent to {email}.")
+                except Exception as mail_err:
+                    messages.error(request, f"Resend failed: {err_msg} (Django mailer error: {mail_err})")
+            else:
+                messages.error(request, f"Resend failed: {err_msg}")
     else:
         messages.error(request, "Please provide an email address to resend the verification link.")
 
