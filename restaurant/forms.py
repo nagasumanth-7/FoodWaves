@@ -100,6 +100,57 @@ class LoginForm(forms.Form):
     )
 
 
+class ForgotPasswordForm(forms.Form):
+    email = forms.EmailField(
+        label="Email address",
+        required=True,
+        widget=forms.EmailInput(attrs={
+            "placeholder": "Enter your registered email address",
+            "autocomplete": "email",
+            "class": "form-control",
+        }),
+    )
+
+    def clean_email(self):
+        return self.cleaned_data.get("email", "").strip().lower()
+
+
+class ResetPasswordForm(forms.Form):
+    new_password = forms.CharField(
+        label="New Password",
+        min_length=6,
+        required=True,
+        widget=forms.PasswordInput(attrs={
+            "placeholder": "Enter new secure password (min 6 chars)",
+            "autocomplete": "new-password",
+            "class": "form-control",
+            "id": "id_new_password",
+        }),
+    )
+    confirm_new_password = forms.CharField(
+        label="Confirm New Password",
+        min_length=6,
+        required=True,
+        widget=forms.PasswordInput(attrs={
+            "placeholder": "Re-enter new password",
+            "autocomplete": "new-password",
+            "class": "form-control",
+            "id": "id_confirm_new_password",
+        }),
+    )
+    access_token = forms.CharField(required=False, widget=forms.HiddenInput(attrs={"id": "id_access_token"}))
+    token_hash = forms.CharField(required=False, widget=forms.HiddenInput(attrs={"id": "id_token_hash"}))
+    email = forms.CharField(required=False, widget=forms.HiddenInput(attrs={"id": "id_email"}))
+
+    def clean(self):
+        cleaned_data = super().clean()
+        pw = cleaned_data.get("new_password")
+        cpw = cleaned_data.get("confirm_new_password")
+        if pw and cpw and pw != cpw:
+            self.add_error("confirm_new_password", "Passwords do not match.")
+        return cleaned_data
+
+
 class ReservationForm(forms.ModelForm):
     TIME_CHOICES = [
         ("", "Select reservation time"),

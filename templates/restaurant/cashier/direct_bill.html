@@ -479,7 +479,12 @@
           {% for item in items %}
             <div class="dish-card" data-name="{{ item.name|lower }}" data-category="{{ item.category.name|lower }}">
               <div>
-                <span class="dish-cat-badge">{{ item.category.name }}</span>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                  <span class="dish-cat-badge">{{ item.category.name }}</span>
+                  {% if not item.is_available %}
+                    <span style="font-size: 10px; font-weight: 700; color: #fbbf24; background: rgba(245, 158, 11, 0.18); border: 1px solid rgba(245, 158, 11, 0.3); padding: 1px 6px; border-radius: 4px;">Kitchen Low</span>
+                  {% endif %}
+                </div>
                 <div class="dish-name">{{ item.name }}</div>
                 {% if item.description %}
                   <p style="font-size: 12px; color: var(--text-secondary); margin: 0; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
@@ -509,6 +514,7 @@
             {% csrf_token %}
             <input type="hidden" name="cart_data" id="cartDataInput" value="[]">
             <input type="hidden" name="action" id="formActionInput" value="generate">
+            <input type="hidden" name="show_receipt" id="showReceiptInput" value="1">
 
             <div class="register-header">
               <b style="color: #ffffff; font-size: 16px;">🧾 Bill Register</b>
@@ -612,10 +618,10 @@
             <!-- Action Buttons -->
             <div style="margin-top: 16px;">
               <button type="button" class="btn-action-primary" id="submitBillBtn" onclick="submitDirectBill()">
-                ✓ Complete & Settle Bill
+                🧾 Generate & View Bill
               </button>
               <button type="button" class="btn-action-secondary" id="saveUnpaidBtn" onclick="submitAsUnpaid()">
-                📋 Generate as Unpaid Bill (Pay Later)
+                📋 Save as Unpaid Bill & View Receipt
               </button>
             </div>
 
@@ -736,9 +742,9 @@
     document.getElementById('settlementFields').style.display = isChecked ? 'block' : 'none';
     const submitBtn = document.getElementById('submitBillBtn');
     if (isChecked) {
-      submitBtn.textContent = '✓ Settle & Print Receipt';
+      submitBtn.textContent = '✓ Settle & View Receipt';
     } else {
-      submitBtn.textContent = '✓ Complete & Settle Bill';
+      submitBtn.textContent = '🧾 Generate & View Bill';
     }
   }
 
@@ -757,6 +763,7 @@
     document.getElementById('cartDataInput').value = JSON.stringify(payloadItems);
     const isSettle = document.getElementById('settleImmediateCheckbox').checked;
     document.getElementById('formActionInput').value = isSettle ? 'settle' : 'generate';
+    document.getElementById('showReceiptInput').value = '1';
 
     document.getElementById('directBillForm').submit();
   }
@@ -775,6 +782,7 @@
 
     document.getElementById('cartDataInput').value = JSON.stringify(payloadItems);
     document.getElementById('formActionInput').value = 'generate';
+    document.getElementById('showReceiptInput').value = '1';
     document.getElementById('settleImmediateCheckbox').checked = false;
 
     document.getElementById('directBillForm').submit();

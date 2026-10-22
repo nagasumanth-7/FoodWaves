@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -175,7 +176,6 @@ def create_direct_counter_bill(
         raise ValidationError("Cannot create a bill with no items selected.")
 
     from ..models import MenuItem, Order, OrderItem
-    from .menu_service import validate_menu_item_availability
 
     with transaction.atomic():
         # 1. Server-side validation of items & prices
@@ -192,9 +192,10 @@ def create_direct_counter_bill(
             except MenuItem.DoesNotExist:
                 raise ValidationError(f"Menu item #{item_id} does not exist.")
 
-            is_valid, msg = validate_menu_item_availability(item)
-            if not is_valid:
-                raise ValidationError(msg)
+            # Cashier direct billing allows active items even if kitchen marked is_available=False
+            # (e.g. cashier billing counter walk-ins or already-served items)
+            if not item.is_active:
+                raise ValidationError(f"'{item.name}' has been archived and is no longer on the menu.")
 
             line_subtotal = item.price * qty
             subtotal += line_subtotal
@@ -289,33 +290,114 @@ def get_unpaid_bills():
     )
 
 
-def get_daily_cashier_summary(target_date=None):
+def get_sales_report_summary(start_date=None, end_date=None, period="today"):
     """
-    Aggregates financial statistics for a given day (defaults to today):
-    total revenue, paid bills count, breakdown by payment method.
+    Financial Sales Report calculation supporting flexible periods and date constraints:
+    Periods supported:
+      - 'today': metrics for today
+      - 'yesterday': metrics for yesterday
+      - 'week': last 7 days (today - 6 days through today)
+      - 'month': last 30 days (today - 29 days through today)
+      - 'custom': custom range bounded by start_date and end_date
+    Validates date constraints (start_date <= end_date, safe fallbacks).
+    Aggregates:
+      - Total revenue collected
+      - Payment methods breakdown (Cash, UPI, Card)
+      - Food subtotal, taxes (GST), discounts, tips
+      - Transaction count
+      - Itemized payment ledger
     """
-    if target_date is None:
-        target_date = timezone.localdate()
+    today = timezone.localdate()
 
-    payments_today = Payment.objects.filter(
+    period = (period or "today").lower().strip()
+    if period == "today":
+        start_date = today
+        end_date = today
+        period_label = f"Today ({today.strftime('%d %b %Y')})"
+    elif period == "yesterday":
+        yesterday = today - timedelta(days=1)
+        start_date = yesterday
+        end_date = yesterday
+        period_label = f"Yesterday ({yesterday.strftime('%d %b %Y')})"
+    elif period == "week":
+        start_date = today - timedelta(days=6)
+        end_date = today
+        period_label = f"Last 7 Days ({start_date.strftime('%d %b')} – {end_date.strftime('%d %b %Y')})"
+    elif period == "month":
+        start_date = today - timedelta(days=29)
+        end_date = today
+        period_label = f"Last 30 Days ({start_date.strftime('%d %b')} – {end_date.strftime('%d %b %Y')})"
+    elif period == "custom":
+        if start_date is None:
+            start_date = today
+        if end_date is None:
+            end_date = start_date or today
+        # Date constraint enforcement: start_date cannot exceed end_date
+        if start_date > end_date:
+            start_date, end_date = end_date, start_date
+        if start_date == end_date:
+            period_label = f"Single Date ({start_date.strftime('%d %b %Y')})"
+        else:
+            period_label = f"Custom Range ({start_date.strftime('%d %b %Y')} – {end_date.strftime('%d %b %Y')})"
+    else:
+        period = "today"
+        start_date = today
+        end_date = today
+        period_label = f"Today ({today.strftime('%d %b %Y')})"
+
+    payments_qs = Payment.objects.filter(
         status="SUCCESS",
-        created_at__date=target_date,
+        created_at__date__gte=start_date,
+        created_at__date__lte=end_date,
     )
 
-    total_revenue = payments_today.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
-    total_transactions = payments_today.count()
+    total_revenue = payments_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+    total_transactions = payments_qs.count()
 
     # Method breakdowns
-    cash_total = payments_today.filter(payment_method="CASH").aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
-    upi_total = payments_today.filter(payment_method="UPI").aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
-    card_total = payments_today.filter(payment_method="CARD").aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+    cash_total = payments_qs.filter(payment_method="CASH").aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+    upi_total = payments_qs.filter(payment_method="UPI").aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+    card_total = payments_qs.filter(payment_method="CARD").aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
+
+    # Linked settled bills aggregates (subtotal, tax, discount, tip)
+    paid_bills_qs = Bill.objects.filter(
+        pk__in=payments_qs.values_list("bill_id", flat=True)
+    )
+    subtotal_sum = paid_bills_qs.aggregate(total=Sum("subtotal"))["total"] or Decimal("0.00")
+    discount_sum = paid_bills_qs.aggregate(total=Sum("discount"))["total"] or Decimal("0.00")
+    tax_sum = paid_bills_qs.aggregate(total=Sum("tax"))["total"] or Decimal("0.00")
+    tip_sum = paid_bills_qs.aggregate(total=Sum("tip"))["total"] or Decimal("0.00")
+
+    payments_list = (
+        payments_qs.select_related("bill__session__table", "bill", "processed_by")
+        .order_by("-created_at")[:100]
+    )
 
     return {
-        "date": target_date,
+        "date": start_date,  # backwards compatibility for single-day consumers
+        "start_date": start_date,
+        "end_date": end_date,
+        "period": period,
+        "period_label": period_label,
+        "is_single_day": (start_date == end_date),
         "total_revenue": total_revenue,
         "total_transactions": total_transactions,
         "cash_total": cash_total,
         "upi_total": upi_total,
         "card_total": card_total,
-        "payments": payments_today.select_related("bill__session__table", "processed_by").order_by("-created_at")[:20],
+        "subtotal_sum": subtotal_sum,
+        "discount_sum": discount_sum,
+        "tax_sum": tax_sum,
+        "tip_sum": tip_sum,
+        "payments": payments_list,
     }
+
+
+def get_daily_cashier_summary(target_date=None):
+    """
+    Backwards-compatible wrapper around get_sales_report_summary for a single target date.
+    """
+    if target_date is None:
+        target_date = timezone.localdate()
+    return get_sales_report_summary(start_date=target_date, end_date=target_date, period="custom" if target_date != timezone.localdate() else "today")
+

@@ -229,3 +229,127 @@ def supabase_get_user(access_token):
             return json.loads(resp.read().decode("utf-8"))
     except Exception:
         return None
+
+
+def supabase_reset_password_request(email, redirect_to=None):
+    """
+    Request a password recovery email from Supabase Auth (/auth/v1/recover).
+    Supabase sends an email containing a secure link to reset the password.
+    """
+    base_url = getattr(settings, "SUPABASE_URL", "").rstrip("/")
+    anon_key = getattr(settings, "SUPABASE_ANON_KEY", "")
+
+    if not base_url or not anon_key:
+        return False, "Supabase authentication is not configured in settings."
+
+    url = f"{base_url}/auth/v1/recover"
+    if redirect_to:
+        url = f"{url}?redirect_to={urllib.parse.quote(redirect_to)}"
+
+    payload = {
+        "email": email.strip().lower(),
+    }
+    if redirect_to:
+        payload["options"] = {"emailRedirectTo": redirect_to}
+
+    data_bytes = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data_bytes, headers=_get_headers(), method="POST")
+
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return True, None
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8")
+        try:
+            err_data = json.loads(error_body)
+            msg = (
+                err_data.get("msg")
+                or err_data.get("message")
+                or err_data.get("error_description")
+                or f"Password reset request failed (HTTP {e.code})."
+            )
+        except Exception:
+            msg = f"HTTP Error {e.code}: {e.reason}"
+        return False, msg
+    except Exception as e:
+        return False, str(e)
+
+
+def supabase_update_user_password(access_token, new_password):
+    """
+    Updates the authenticated user's password in Supabase Auth (/auth/v1/user).
+    Returns: (True, user_data, None) on success or (False, None, error_message) on error.
+    """
+    base_url = getattr(settings, "SUPABASE_URL", "").rstrip("/")
+    anon_key = getattr(settings, "SUPABASE_ANON_KEY", "")
+
+    if not base_url or not anon_key or not access_token:
+        return False, None, "Invalid or missing access token."
+
+    url = f"{base_url}/auth/v1/user"
+    headers = {
+        "apikey": anon_key,
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "password": new_password,
+    }
+    data_bytes = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data_bytes, headers=headers, method="PUT")
+
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            return True, data, None
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8")
+        try:
+            err_data = json.loads(error_body)
+            msg = (
+                err_data.get("msg")
+                or err_data.get("message")
+                or err_data.get("error_description")
+                or f"Password update failed (HTTP {e.code})."
+            )
+        except Exception:
+            msg = f"HTTP Error {e.code}: {e.reason}"
+        return False, None, msg
+    except Exception as e:
+        return False, None, str(e)
+
+
+def supabase_verify_token(token_hash, type_="email"):
+    """
+    Verifies a token_hash with Supabase GoTrue Auth API (/auth/v1/verify).
+    Returns (True, data, None) or (False, None, error_msg).
+    """
+    base_url = getattr(settings, "SUPABASE_URL", "").rstrip("/")
+    anon_key = getattr(settings, "SUPABASE_ANON_KEY", "")
+
+    if not base_url or not anon_key or not token_hash:
+        return False, None, "Invalid or missing token hash."
+
+    url = f"{base_url}/auth/v1/verify?token_hash={urllib.parse.quote(token_hash)}&type={urllib.parse.quote(type_)}"
+    req = urllib.request.Request(url, headers=_get_headers(), method="GET")
+
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            return True, data, None
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode("utf-8")
+        try:
+            err_data = json.loads(error_body)
+            msg = (
+                err_data.get("msg")
+                or err_data.get("message")
+                or err_data.get("error_description")
+                or f"Verification failed (HTTP {e.code})."
+            )
+        except Exception:
+            msg = f"HTTP Error {e.code}: {e.reason}"
+        return False, None, msg
+    except Exception as e:
+        return False, None, str(e)
+

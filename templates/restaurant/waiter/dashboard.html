@@ -283,9 +283,13 @@
       <div>
         <span class="eyebrow" style="color: #60a5fa;">Floor Operations Control</span>
         <h1>Dining Tables & Service</h1>
-        <p style="color: var(--text-secondary); margin-top: 6px;">Manage active dining tables, take customer orders, and track kitchen preparations.</p>
+        <p style="color: var(--text-secondary); margin-top: 6px;">Manage active dining tables, view reserved guests, assign tables, and take customer orders.</p>
       </div>
-      <!-- Header Actions -->
+      <div>
+        <a href="{% url 'restaurant:waiter_reservations' %}" class="button" style="background: linear-gradient(135deg, #2563eb, #3b82f6); color: #ffffff; display: inline-flex; align-items: center; gap: 8px;">
+          <span>📅</span> Guest Reservations &amp; Seating ({{ today_reservations_count }}) →
+        </a>
+      </div>
     </div>
 
     <!-- Ready to Serve Alert Banner -->
@@ -331,6 +335,114 @@
         <span class="stat-label">Reserved Tables</span>
         <div class="stat-value" style="color: #a78bfa;">{{ reserved_count }}</div>
       </div>
+      <a href="{% url 'restaurant:waiter_reservations' %}" class="stat-card" style="text-decoration: none; border-color: rgba(96, 165, 250, 0.35);">
+        <span class="stat-label" style="color: #60a5fa;">Today's Reservations</span>
+        <div class="stat-value" style="color: #60a5fa; display: flex; justify-content: space-between; align-items: baseline;">
+          <span>{{ today_reservations_count }}</span>
+          {% if unassigned_today_count > 0 %}
+            <span style="font-size: 11px; font-weight: 700; color: #fbbf24; background: rgba(251, 191, 36, 0.15); border: 1px solid rgba(251, 191, 36, 0.3); padding: 3px 8px; border-radius: 999px;">
+              {{ unassigned_today_count }} Unassigned
+            </span>
+          {% endif %}
+        </div>
+      </a>
+    </div>
+
+    <!-- Today's Reserved Guests Panel -->
+    <div style="background: rgba(9, 23, 44, 0.85); border: 1px solid var(--border-glass); border-radius: var(--radius-lg); padding: 24px; margin-bottom: 36px; backdrop-filter: blur(16px);">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border-glass);">
+        <div>
+          <h2 style="font-size: 20px; font-weight: 800; color: #ffffff; margin: 0; display: flex; align-items: center; gap: 10px;">
+            <span>📅</span> Today's Reserved Guests
+            <span style="font: 700 11px var(--mono); background: rgba(96, 165, 250, 0.15); color: #60a5fa; border: 1px solid rgba(96, 165, 250, 0.3); padding: 2px 10px; border-radius: 999px;">
+              {{ today_reservations_count }} Booked
+            </span>
+            {% if unassigned_today_count > 0 %}
+              <span style="font: 700 11px var(--mono); background: rgba(251, 191, 36, 0.15); color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.3); padding: 2px 10px; border-radius: 999px;">
+                ⚠️ {{ unassigned_today_count }} Need Table Assignment
+              </span>
+            {% endif %}
+          </h2>
+          <p style="color: var(--text-secondary); font-size: 13px; margin: 4px 0 0;">
+            Users who reserved tables for today. Assign dining tables and seat parties when they arrive.
+          </p>
+        </div>
+        <a href="{% url 'restaurant:waiter_reservations' %}" class="button" style="font-size: 13px; padding: 8px 16px;">
+          Manage All Reservations →
+        </a>
+      </div>
+
+      {% if today_reservations %}
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px;">
+          {% for res in today_reservations %}
+            <div style="background: rgba(4, 13, 26, 0.7); border: 1px solid {% if not res.table %}rgba(251, 191, 36, 0.4){% else %}var(--border-glass){% endif %}; border-radius: var(--radius-md); padding: 16px; display: flex; flex-direction: column; justify-content: space-between; gap: 12px;">
+              <div>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+                  <div>
+                    <span style="font: 700 10px var(--mono); color: var(--cyan);">#{{ res.id }}</span>
+                    <b style="color: #ffffff; font-size: 16px; display: block;">{{ res.name }}</b>
+                  </div>
+                  <span class="status-pill pill-{{ res.status }}" style="font-size: 10px; padding: 2px 8px;">{{ res.status }}</span>
+                </div>
+                <div style="font-size: 12px; color: var(--text-secondary); margin-bottom: 6px;">
+                  ⏰ <b>{{ res.time }}</b> • 👥 <b>{{ res.guests }} Guests</b> • 🪑 {{ res.seating_preference }}
+                </div>
+                <div style="font-size: 12px; color: var(--text-secondary);">
+                  📞 {{ res.phone_number }} • <span style="font-family: var(--mono); color: var(--cyan);">{{ res.user.username }}</span>
+                </div>
+                {% if res.special_requests %}
+                  <div style="font-size: 11px; color: #fde68a; background: rgba(251, 191, 36, 0.08); padding: 4px 8px; border-radius: 4px; margin-top: 6px;">
+                    Note: {{ res.special_requests|truncatechars:60 }}
+                  </div>
+                {% endif %}
+              </div>
+
+              <div style="border-top: 1px solid rgba(255, 255, 255, 0.06); padding-top: 10px;">
+                {% if res.table %}
+                  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font: 700 12px var(--mono); color: #34d399;">
+                      🍽️ Table {{ res.table.table_number }} ({{ res.table.capacity }} seats) • Open
+                    </span>
+                    {% if res.status != 'COMPLETED' and res.status != 'CANCELLED' %}
+                      <form method="POST" action="{% url 'restaurant:waiter_unassign_table' res.id %}" style="margin: 0;">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <button type="submit" style="background: none; border: none; color: #f87272; font-size: 11px; cursor: pointer;">Unassign</button>
+                      </form>
+                    {% endif %}
+                  </div>
+                  <a href="{% url 'restaurant:waiter_table_detail' res.table.id %}" class="btn-serve-now" style="width: 100%; text-align: center; padding: 8px 12px; font-size: 12px; text-decoration: none; display: block; background: rgba(52, 211, 153, 0.2); border-color: #34d399; color: #34d399;">
+                    Manage Orders on Table {{ res.table.table_number }} →
+                  </a>
+                {% else %}
+                  <div style="margin-bottom: 8px;">
+                    <span style="font: 700 11px var(--mono); color: #fbbf24; display: block; margin-bottom: 6px;">
+                      ⚠️ Assign Dining Table:
+                    </span>
+                    <form method="POST" action="{% url 'restaurant:waiter_assign_table' res.id %}" style="display: flex; gap: 6px; margin: 0;">
+                      {% csrf_token %}
+                      <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                      <select name="table_id" style="flex: 1; background: rgba(3, 8, 19, 0.8); border: 1px solid var(--border-glass); border-radius: var(--radius-sm); color: #ffffff; font-size: 12px; padding: 6px;" required>
+                        <option value="">Select table...</option>
+                        {% for tbl in available_tables %}
+                          <option value="{{ tbl.id }}">Table {{ tbl.table_number }} ({{ tbl.capacity }}s, {{ tbl.get_floor_area_display }})</option>
+                        {% endfor %}
+                      </select>
+                      <button type="submit" class="btn-serve-now" style="background: #3b82f6; color: #ffffff; padding: 6px 10px; font-size: 11px;">
+                        Assign & Open
+                      </button>
+                    </form>
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <p style="color: var(--text-secondary); font-size: 14px; margin: 0;">
+          No reservations booked for today yet. Walk-ins can be seated directly on any available table below.
+        </p>
+      {% endif %}
     </div>
 
     <!-- Filter Bar -->

@@ -280,6 +280,18 @@
                   <b>{{ booking.name }} ({{ booking.phone_number }})</b>
                 </div>
 
+                {% if booking.table %}
+                  <div class="spec-item" style="color: #a78bfa;">
+                    <span>Assigned Table:</span>
+                    <b style="color: #a78bfa;">Table {{ booking.table.table_number }} ({{ booking.table.capacity }} seats • {{ booking.table.get_floor_area_display }})</b>
+                  </div>
+                {% else %}
+                  <div class="spec-item" style="color: var(--text-muted);">
+                    <span>Assigned Table:</span>
+                    <span style="font-style: italic; color: #fbbf24;">Pending table assignment by floor host</span>
+                  </div>
+                {% endif %}
+
                 {% if booking.special_requests %}
                   <div class="spec-notes">
                     <strong>Note:</strong> {{ booking.special_requests }}
@@ -338,6 +350,13 @@
                   <span>Reserved by:</span>
                   <b>{{ booking.name }}</b>
                 </div>
+
+                {% if booking.table %}
+                  <div class="spec-item" style="color: var(--text-dim);">
+                    <span>Table:</span>
+                    <b>Table {{ booking.table.table_number }} ({{ booking.table.get_floor_area_display }})</b>
+                  </div>
+                {% endif %}
 
                 {% if booking.special_requests %}
                   <div class="spec-notes" style="border-color: var(--text-dim);">

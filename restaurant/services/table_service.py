@@ -1,5 +1,6 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from ..models import RestaurantTable, TableSession, Reservation, Bill
@@ -104,12 +105,16 @@ def get_or_create_active_session(table, customer=None, guest_name=None, guest_co
         return new_session
 
 
-def open_table_session(table, guest_name, guest_count, waiter_user=None, reservation=None):
+def open_table_session(table, guest_name, guest_count, waiter_user=None, reservation=None, customer=None):
     """
     Convenience wrapper for floor waiters seating guests.
     """
+    if reservation and not customer:
+        customer = getattr(reservation, "user", None)
+
     return get_or_create_active_session(
         table=table,
+        customer=customer,
         guest_name=guest_name,
         guest_count=guest_count,
         waiter_user=waiter_user,
@@ -128,8 +133,21 @@ def close_table_session(session):
         locked_session.closed_at = timezone.now()
         locked_session.save(update_fields=["status", "closed_at"])
 
+        if locked_session.reservation:
+            res = locked_session.reservation
+            if res.status == "ARRIVED":
+                res.status = "COMPLETED"
+                res.save(update_fields=["status"])
+
         table = RestaurantTable.objects.select_for_update().get(pk=locked_session.table_id)
-        table.status = "AVAILABLE"
+        # Check if another confirmed reservation exists for this table today
+        today = timezone.localdate()
+        has_future_res = Reservation.objects.filter(
+            table=table,
+            date=today,
+            status__in=["CONFIRMED", "PENDING"],
+        ).exists()
+        table.status = "RESERVED" if has_future_res else "AVAILABLE"
         table.save(update_fields=["status"])
 
 
@@ -140,3 +158,187 @@ def set_table_bill_pending(table_id):
         table.status = "BILL_PENDING"
         table.save(update_fields=["status"])
         return table
+
+
+def get_reservations_for_waiter(date=None, status=None, search_query=None, assignment=None):
+    """
+    Retrieves reservations for the waiter portal with multi-criteria filtering.
+    """
+    qs = Reservation.objects.select_related("user", "table").all()
+
+    today = timezone.localdate()
+    if date:
+        date_str = str(date).strip().upper()
+        if date_str == "TODAY":
+            qs = qs.filter(date=today)
+        elif date_str == "UPCOMING":
+            qs = qs.filter(date__gte=today)
+        elif date_str == "PAST":
+            qs = qs.filter(date__lt=today)
+        elif date_str != "ALL":
+            qs = qs.filter(date=date)
+
+    if status and status != "ALL":
+        qs = qs.filter(status=status)
+
+    if assignment:
+        assignment_str = str(assignment).strip().upper()
+        if assignment_str == "UNASSIGNED":
+            qs = qs.filter(table__isnull=True)
+        elif assignment_str == "ASSIGNED":
+            qs = qs.filter(table__isnull=False)
+
+    if search_query:
+        sq = search_query.strip()
+        qs = qs.filter(
+            Q(name__icontains=sq)
+            | Q(phone_number__icontains=sq)
+            | Q(email__icontains=sq)
+            | Q(user__username__icontains=sq)
+            | Q(user__email__icontains=sq)
+            | Q(id__iexact=sq)
+        )
+
+    return qs.order_by("date", "time", "-created_at")
+
+
+def assign_table_to_reservation(reservation, table, waiter_user=None):
+    """
+    Assigns or reassigns a restaurant table to a reservation.
+    Transitions table to OCCUPIED and opens an active TableSession so the table
+    is open and immediately ready to take orders.
+    """
+    with transaction.atomic():
+        locked_res = Reservation.objects.select_for_update().get(pk=reservation.pk)
+        old_table = locked_res.table
+
+        locked_table = RestaurantTable.objects.select_for_update().get(pk=table.pk)
+        if not locked_table.is_active:
+            raise ValidationError(f"Table {locked_table.table_number} is inactive.")
+        if locked_table.status == "OUT_OF_SERVICE":
+            raise ValidationError(f"Table {locked_table.table_number} is currently out of service.")
+
+        # If reassigning away from a previous table, clean up old table session
+        if old_table and old_table.pk != locked_table.pk:
+            old_session = TableSession.objects.filter(table=old_table, reservation=locked_res, status="ACTIVE").first()
+            if old_session:
+                if not old_session.orders.exists():
+                    old_session.status = "CANCELLED"
+                    old_session.closed_at = timezone.now()
+                    old_session.save(update_fields=["status", "closed_at"])
+                else:
+                    old_session.table = locked_table
+                    old_session.save(update_fields=["table"])
+
+            other_res_count = Reservation.objects.filter(
+                table=old_table,
+                date=locked_res.date,
+                status__in=["CONFIRMED", "PENDING", "ARRIVED"],
+            ).exclude(pk=locked_res.pk).count()
+            has_other_session = TableSession.objects.filter(table=old_table, status="ACTIVE").exists()
+            if other_res_count == 0 and not has_other_session and old_table.status in ["RESERVED", "OCCUPIED"]:
+                old_table.status = "AVAILABLE"
+                old_table.save(update_fields=["status"])
+
+        locked_res.table = locked_table
+        locked_res.status = "ARRIVED"
+        locked_res.save(update_fields=["table", "status"])
+
+        # Automatically open table session so table is open and ready to take orders
+        session = TableSession.objects.filter(table=locked_table, status="ACTIVE").first()
+        if not session:
+            session = open_table_session(
+                table=locked_table,
+                guest_name=locked_res.name,
+                guest_count=locked_res.guests,
+                waiter_user=waiter_user or getattr(locked_res, "user", None),
+                reservation=locked_res,
+                customer=getattr(locked_res, "user", None),
+            )
+        else:
+            if not session.reservation:
+                session.reservation = locked_res
+                session.guest_name = locked_res.name
+                session.guest_count = locked_res.guests
+                session.save(update_fields=["reservation", "guest_name", "guest_count"])
+
+        locked_table.status = "OCCUPIED"
+        locked_table.save(update_fields=["status"])
+
+        return locked_res
+
+
+def unassign_table_from_reservation(reservation):
+    """
+    Unassigns a table from a reservation.
+    Cancels empty active sessions and reverts the table status back to AVAILABLE.
+    """
+    with transaction.atomic():
+        locked_res = Reservation.objects.select_for_update().get(pk=reservation.pk)
+        old_table = locked_res.table
+        if old_table:
+            active_sess = TableSession.objects.filter(table=old_table, reservation=locked_res, status="ACTIVE").first()
+            if active_sess:
+                if not active_sess.orders.exists():
+                    active_sess.status = "CANCELLED"
+                    active_sess.closed_at = timezone.now()
+                    active_sess.save(update_fields=["status", "closed_at"])
+                else:
+                    active_sess.reservation = None
+                    active_sess.save(update_fields=["reservation"])
+
+            other_res_count = Reservation.objects.filter(
+                table=old_table,
+                date=locked_res.date,
+                status__in=["CONFIRMED", "PENDING", "ARRIVED"],
+            ).exclude(pk=locked_res.pk).count()
+            has_other_session = TableSession.objects.filter(table=old_table, status="ACTIVE").exists()
+            if other_res_count == 0 and not has_other_session:
+                old_table.status = "AVAILABLE"
+                old_table.save(update_fields=["status"])
+
+            locked_res.table = None
+            if locked_res.status == "ARRIVED":
+                locked_res.status = "CONFIRMED"
+            locked_res.save(update_fields=["table", "status"])
+
+        return locked_res
+
+
+def seat_reservation(reservation, table=None, waiter_user=None):
+    """
+    Seats a customer from their reservation:
+    - Verifies/assigns the target table
+    - Sets reservation status to ARRIVED
+    - Opens an active TableSession
+    - Sets table status to OCCUPIED
+    """
+    with transaction.atomic():
+        locked_res = Reservation.objects.select_for_update().get(pk=reservation.pk)
+        target_table = table or locked_res.table
+        if not target_table:
+            raise ValidationError("Please assign or select a table before seating guests.")
+
+        locked_table = RestaurantTable.objects.select_for_update().get(pk=target_table.pk)
+        if not locked_table.is_active:
+            raise ValidationError(f"Table {locked_table.table_number} is inactive.")
+        if locked_table.status == "OUT_OF_SERVICE":
+            raise ValidationError(f"Table {locked_table.table_number} is out of service.")
+        if locked_table.status == "OCCUPIED" and not TableSession.objects.filter(table=locked_table, status="ACTIVE", reservation=locked_res).exists():
+            raise ValidationError(f"Table {locked_table.table_number} is already occupied by another party.")
+
+        # Update reservation
+        locked_res.table = locked_table
+        locked_res.status = "ARRIVED"
+        locked_res.save(update_fields=["table", "status"])
+
+        # Open active session
+        session = open_table_session(
+            table=locked_table,
+            guest_name=locked_res.name,
+            guest_count=locked_res.guests,
+            waiter_user=waiter_user,
+            reservation=locked_res,
+        )
+        return session
+

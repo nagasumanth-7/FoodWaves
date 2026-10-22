@@ -76,9 +76,11 @@
       padding: 3px 8px;
       border-radius: 999px;
     }
+    .isp-PENDING { background: rgba(148, 163, 184, 0.15); color: #cbd5e1; }
     .isp-PREPARING { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
     .isp-READY { background: rgba(52, 211, 153, 0.2); color: #34d399; font-weight: 700; }
     .isp-SERVED { background: rgba(148, 163, 184, 0.15); color: #94a3b8; }
+    .isp-CANCELLED { background: rgba(239, 68, 68, 0.15); color: #f87272; font-weight: 700; }
 
     .order-card {
       background: rgba(4, 13, 26, 0.6);
@@ -192,12 +194,68 @@
         </div>
 
       {% else %}
+        <!-- Assigned Reservation Banner if table has one for today -->
+        {% if assigned_reservation %}
+          <div style="background: rgba(167, 139, 250, 0.12); border: 1px solid rgba(167, 139, 250, 0.35); border-radius: var(--radius-md); padding: 18px 20px; margin-bottom: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 10px;">
+              <span style="font: 700 12px var(--mono); color: #a78bfa; text-transform: uppercase; letter-spacing: .05em;">
+                📌 Table Reserved for Today
+              </span>
+              <span class="status-badge badge-{{ assigned_reservation.status }}">{{ assigned_reservation.status }}</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+              <div>
+                <b style="color: #ffffff; font-size: 18px;">{{ assigned_reservation.name }}</b>
+                <div style="font-size: 13px; color: var(--text-secondary); margin-top: 4px;">
+                  ⏰ <b>{{ assigned_reservation.time }}</b> • 👥 <b>{{ assigned_reservation.guests }} Guests</b> • 📞 {{ assigned_reservation.phone_number }}
+                </div>
+                {% if assigned_reservation.special_requests %}
+                  <div style="font-size: 12px; color: #fde68a; margin-top: 6px;">Note: {{ assigned_reservation.special_requests }}</div>
+                {% endif %}
+              </div>
+              <form method="POST" action="{% url 'restaurant:waiter_table_open' table.id %}" style="margin: 0;">
+                {% csrf_token %}
+                <input type="hidden" name="reservation_id" value="{{ assigned_reservation.id }}">
+                <button type="submit" class="button" style="background: linear-gradient(135deg, #059669, #10b981); color: #ffffff; font-size: 14px;">
+                  Seat Reserved Party ({{ assigned_reservation.name }}) →
+                </button>
+              </form>
+            </div>
+          </div>
+        {% endif %}
+
         <!-- Seating Form for Available Table -->
         <div style="padding: 12px 0;">
           <h3 style="margin-top: 0; color: #ffffff;">Seat Guests on Table {{ table.table_number }}</h3>
           <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 14px;">
-            Open an active dining session for walk-in guests or reservations.
+            Open an active dining session for reserved guests or walk-ins.
           </p>
+
+          {% if today_unseated_reservations %}
+            <div style="background: rgba(4, 13, 26, 0.65); border: 1px solid var(--border-glass); border-radius: var(--radius-md); padding: 18px; margin-bottom: 20px;">
+              <span style="font: 700 12px var(--mono); color: #60a5fa; display: block; margin-bottom: 8px;">
+                Option 1: Seat from Today's Reservations
+              </span>
+              <form method="POST" action="{% url 'restaurant:waiter_table_open' table.id %}" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                {% csrf_token %}
+                <select name="reservation_id" class="form-control" style="flex: 1; min-width: 260px;" required>
+                  <option value="">Select a reservation to seat...</option>
+                  {% for res in today_unseated_reservations %}
+                    <option value="{{ res.id }}" {% if res.id == assigned_reservation.id %}selected{% endif %}>
+                      #{{ res.id }} - {{ res.name }} ({{ res.guests }} guests at {{ res.time }}) - Prefers: {{ res.seating_preference }}
+                    </option>
+                  {% endfor %}
+                </select>
+                <button type="submit" class="button" style="background: linear-gradient(135deg, #059669, #10b981); color: #ffffff;">
+                  Seat Selected Reservation →
+                </button>
+              </form>
+            </div>
+
+            <div style="text-align: center; margin: 16px 0; color: var(--text-secondary); font-size: 12px; font-weight: 700;">
+              — OR SEAT A WALK-IN PARTY —
+            </div>
+          {% endif %}
 
           <form method="POST" action="{% url 'restaurant:waiter_table_open' table.id %}">
             {% csrf_token %}
@@ -212,7 +270,7 @@
               </div>
             </div>
             <button type="submit" class="button" style="background: linear-gradient(135deg, #2563eb, #3b82f6); color: #ffffff;">
-              Seat & Open Table Session →
+              Seat Walk-In Party &amp; Open Session →
             </button>
           </form>
         </div>
@@ -277,6 +335,10 @@
                         </form>
                       {% elif item.status == 'SERVED' %}
                         <span style="color: var(--text-secondary); font-size: 12px;">Served</span>
+                      {% elif item.status == 'CANCELLED' %}
+                        <span style="color: #f87272; font-size: 12px; font-weight: 700;">Not Available</span>
+                      {% elif item.status == 'PENDING' %}
+                        <span style="color: var(--text-secondary); font-size: 12px;">Queued</span>
                       {% else %}
                         <span style="color: #fbbf24; font-size: 12px;">Cooking...</span>
                       {% endif %}

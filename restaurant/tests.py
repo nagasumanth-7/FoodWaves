@@ -138,6 +138,119 @@ class SupabaseAuthAndReservationTests(TestCase):
         mock_sign_out.assert_called_once_with("jwt-session-token-123")
         self.assertNotIn("supabase_token", self.client.session)
 
+    def test_login_page_renders_view_password_and_forgot_password_link(self):
+        response = self.client.get(self.login_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-target="id_password"')
+        self.assertContains(response, "btn-toggle-password")
+        self.assertContains(response, "Forgot password?")
+        self.assertContains(response, reverse("restaurant:forgot_password"))
+        self.assertContains(response, 'id="id_recovery_email"')
+        self.assertContains(response, "Secured with Supabase Password Recovery")
+        self.assertContains(response, "Send Supabase Reset Link")
+
+    @patch("restaurant.views.supabase_reset_password_request")
+    def test_login_page_inline_forgot_password_post_dispatches_supabase(self, mock_reset):
+        mock_reset.return_value = (True, None)
+
+        response = self.client.post(self.login_url, {
+            "action": "forgot_password",
+            "email": "customer@example.com",
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, self.login_url)
+        self.assertTrue(mock_reset.called)
+        call_args = mock_reset.call_args
+        self.assertEqual(call_args[0][0], "customer@example.com")
+        self.assertIn("reset-password", call_args[1]["redirect_to"])
+
+    @patch("restaurant.views.supabase_reset_password_request")
+    def test_login_page_inline_forgot_password_ajax_returns_json(self, mock_reset):
+        mock_reset.return_value = (True, None)
+
+        response = self.client.post(
+            self.login_url,
+            {"action": "forgot_password", "email": "customer@example.com"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(mock_reset.called)
+        data = response.json()
+        self.assertTrue(data["success"])
+        self.assertIn("dispatched by Supabase", data["message"])
+        self.assertEqual(data["email"], "customer@example.com")
+
+    @patch("restaurant.views.supabase_reset_password_request")
+    def test_forgot_password_page_ajax_returns_json(self, mock_reset):
+        mock_reset.return_value = (True, None)
+
+        forgot_url = reverse("restaurant:forgot_password")
+        response = self.client.post(
+            forgot_url,
+            {"email": "customer@example.com"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(mock_reset.called)
+        data = response.json()
+        self.assertTrue(data["success"])
+        self.assertIn("customer@example.com", data["email"])
+
+    def test_signup_page_renders_view_password_toggles(self):
+        response = self.client.get(self.signup_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-target="id_password"')
+        self.assertContains(response, 'data-target="id_confirm_password"')
+        self.assertContains(response, "btn-toggle-password")
+
+    @patch("restaurant.views.supabase_reset_password_request")
+    def test_forgot_password_page_dispatches_supabase_recovery(self, mock_reset):
+        mock_reset.return_value = (True, None)
+
+        forgot_url = reverse("restaurant:forgot_password")
+        response_get = self.client.get(forgot_url)
+        self.assertEqual(response_get.status_code, 200)
+        self.assertContains(response_get, "Forgot password?")
+
+        response_post = self.client.post(forgot_url, {"email": "customer@example.com"})
+        self.assertEqual(response_post.status_code, 200)
+        self.assertTrue(mock_reset.called)
+        self.assertContains(response_post, "customer@example.com")
+        self.assertContains(response_post, "Check your email")
+
+    @patch("restaurant.views.supabase_update_user_password")
+    def test_reset_password_page_updates_password_via_supabase(self, mock_update_pw):
+        mock_update_pw.return_value = (True, {"email": "customer@example.com"}, None)
+
+        # Create user in Django DB
+        user = User.objects.create_user(
+            username="customer@example.com",
+            email="customer@example.com",
+            password="OldPassword123!",
+            is_active=True,
+        )
+
+        reset_url = reverse("restaurant:reset_password")
+        response_get = self.client.get(reset_url)
+        self.assertEqual(response_get.status_code, 200)
+        self.assertContains(response_get, "btn-toggle-password")
+        self.assertContains(response_get, 'data-target="id_new_password"')
+        self.assertContains(response_get, 'data-target="id_confirm_new_password"')
+
+        # Post new password with Supabase access_token
+        response_post = self.client.post(reset_url, {
+            "new_password": "NewSecurePassword456!",
+            "confirm_new_password": "NewSecurePassword456!",
+            "access_token": "mock-supabase-access-token",
+            "email": "customer@example.com",
+        })
+        self.assertEqual(response_post.status_code, 302)
+        self.assertRedirects(response_post, self.login_url)
+
+        self.assertTrue(mock_update_pw.called)
+        user.refresh_from_db()
+        self.assertTrue(user.check_password("NewSecurePassword456!"))
+
     def test_prebook_table_requires_login(self):
         booking_data = {
             "name": "Guest User",
@@ -650,6 +763,98 @@ class MenuManagementAndSecurityTests(TestCase):
         self.assertEqual(self.client.get(reverse("restaurant:waiter_dashboard")).status_code, 403)
         self.assertEqual(self.client.get(reverse("restaurant:cashier_dashboard")).status_code, 200)
 
+    # 20. Sales report accessible by Manager and Cashier with period presets and date constraints
+    def test_sales_report_manager_and_cashier_periods_and_constraints(self):
+        from restaurant.models import Bill, Payment
+        from datetime import timedelta
+        today = timezone.localdate()
+
+        # Create a paid bill & payment today
+        bill_today = Bill.objects.create(
+            order_type="COUNTER",
+            customer_name="Today Guest",
+            cashier=self.cashier,
+            subtotal=Decimal("400.00"),
+            tax=Decimal("20.00"),
+            discount=Decimal("0.00"),
+            tip=Decimal("10.00"),
+            total=Decimal("430.00"),
+            status="PAID",
+        )
+        Payment.objects.create(
+            bill=bill_today,
+            amount=Decimal("430.00"),
+            payment_method="UPI",
+            status="SUCCESS",
+            transaction_id="UPI-TODAY-001",
+            processed_by=self.cashier,
+        )
+
+        # 1. Manager can access via manager_reports and cashier_reports
+        self.client.force_login(self.manager)
+        resp_mgr_1 = self.client.get(reverse("restaurant:manager_reports"))
+        self.assertEqual(resp_mgr_1.status_code, 200)
+        self.assertContains(resp_mgr_1, "Sales &amp; Revenue Report")
+        self.assertContains(resp_mgr_1, "Back to Manager Dashboard")
+        self.assertContains(resp_mgr_1, "430.00")
+
+        resp_mgr_2 = self.client.get(reverse("restaurant:cashier_reports"))
+        self.assertEqual(resp_mgr_2.status_code, 200)
+
+        # 2. Cashier can access via cashier_reports
+        self.client.force_login(self.cashier)
+        resp_cash = self.client.get(reverse("restaurant:cashier_reports"))
+        self.assertEqual(resp_cash.status_code, 200)
+        self.assertContains(resp_cash, "Back to Cashier Dashboard")
+
+        # 3. Waiter and Customer are blocked (403 Forbidden)
+        self.client.force_login(self.waiter)
+        self.assertEqual(self.client.get(reverse("restaurant:manager_reports")).status_code, 403)
+        self.assertEqual(self.client.get(reverse("restaurant:cashier_reports")).status_code, 403)
+
+        self.client.force_login(self.customer)
+        self.assertEqual(self.client.get(reverse("restaurant:manager_reports")).status_code, 403)
+        self.assertEqual(self.client.get(reverse("restaurant:cashier_reports")).status_code, 403)
+
+        # 4. Period presets testing
+        self.client.force_login(self.manager)
+
+        # Today preset
+        resp_today = self.client.get(f"{reverse('restaurant:manager_reports')}?period=today")
+        self.assertEqual(resp_today.status_code, 200)
+        self.assertEqual(resp_today.context["period"], "today")
+        self.assertEqual(resp_today.context["summary"]["total_revenue"], Decimal("430.00"))
+
+        # Yesterday preset
+        resp_yesterday = self.client.get(f"{reverse('restaurant:manager_reports')}?period=yesterday")
+        self.assertEqual(resp_yesterday.status_code, 200)
+        self.assertEqual(resp_yesterday.context["period"], "yesterday")
+
+        # Week (Last 7 Days) preset
+        resp_week = self.client.get(f"{reverse('restaurant:manager_reports')}?period=week")
+        self.assertEqual(resp_week.status_code, 200)
+        self.assertEqual(resp_week.context["period"], "week")
+        self.assertEqual(resp_week.context["summary"]["total_revenue"], Decimal("430.00"))
+
+        # Month (Last 30 Days) preset
+        resp_month = self.client.get(f"{reverse('restaurant:manager_reports')}?period=month")
+        self.assertEqual(resp_month.status_code, 200)
+        self.assertEqual(resp_month.context["period"], "month")
+
+        # 5. Date constraints testing
+        # Start date after end date: sanitized automatically without 500 error
+        future_or_reversed = f"{reverse('restaurant:manager_reports')}?period=custom&start_date=2026-10-25&end_date=2026-10-10"
+        resp_constrained = self.client.get(future_or_reversed)
+        self.assertEqual(resp_constrained.status_code, 200)
+        # Dates swapped so start_date <= end_date
+        self.assertTrue(resp_constrained.context["summary"]["start_date"] <= resp_constrained.context["summary"]["end_date"])
+
+        # Invalid date format handled gracefully with fallback to today
+        invalid_url = f"{reverse('restaurant:manager_reports')}?period=custom&start_date=invalid-date&end_date=not-a-date"
+        resp_invalid = self.client.get(invalid_url)
+        self.assertEqual(resp_invalid.status_code, 200)
+        self.assertEqual(resp_invalid.context["summary"]["start_date"], today)
+
 
 # ==============================================================================
 # SECTION 46 & QR ORDERING ARCHITECTURE TESTS
@@ -1120,6 +1325,609 @@ class CustomerQROrderingAndSystemCompletenessTests(TestCase):
         self.assertEqual(resp_receipt.status_code, 200)
         self.assertContains(resp_receipt, "Walk-in Guest")
         self.assertContains(resp_receipt, "PAID IN FULL")
+
+    # 17. Direct counter bill allows items marked is_available=False without throwing error
+    def test_cashier_direct_bill_with_kitchen_unavailable_item(self):
+        from restaurant.models import Bill, MenuItem
+        self.client.force_login(self.cashier)
+
+        # Mark an item as unavailable in kitchen (e.g. Cold Coffee)
+        cold_coffee = MenuItem.objects.create(
+            category=self.category,
+            name="Cold Coffee",
+            price=Decimal("120.00"),
+            is_active=True,
+            is_available=False,
+        )
+
+        url_new_bill = reverse("restaurant:cashier_direct_bill")
+        payload = {
+            "customer_name": "Direct Guest With Coffee",
+            "order_type": "COUNTER",
+            "cart_data": json.dumps([{"item_id": cold_coffee.id, "quantity": 2}]),
+            "discount_pct": "0.00",
+            "tip_amount": "0.00",
+            "action": "generate",
+            "show_receipt": "1",
+        }
+        resp = self.client.post(url_new_bill, payload)
+        self.assertEqual(resp.status_code, 302)
+
+        bill = Bill.objects.filter(customer_name="Direct Guest With Coffee").first()
+        self.assertIsNotNone(bill)
+        # Should redirect directly to receipt view when show_receipt=1
+        self.assertRedirects(resp, reverse("restaurant:cashier_receipt", kwargs={"bill_id": bill.id}))
+
+        # Bill details check
+        self.assertEqual(bill.subtotal, Decimal("240.00"))
+        # GST 5% = 12.00, total = 252.00
+        self.assertEqual(bill.total, Decimal("252.00"))
+
+        # Verify receipt view displays the item and options
+        resp_receipt = self.client.get(reverse("restaurant:cashier_receipt", kwargs={"bill_id": bill.id}))
+        self.assertEqual(resp_receipt.status_code, 200)
+        self.assertContains(resp_receipt, "Cold Coffee")
+        self.assertContains(resp_receipt, "UNPAID / DUE")
+        self.assertContains(resp_receipt, "Print Bill")
+        self.assertContains(resp_receipt, "Download PDF")
+        self.assertContains(resp_receipt, "Download File")
+
+    # 18. Cashier bill download view and attachment headers
+    def test_cashier_bill_download_view_and_pdf_support(self):
+        from restaurant.models import Bill
+        self.client.force_login(self.cashier)
+
+        bill = Bill.objects.create(
+            order_type="COUNTER",
+            customer_name="Invoice Downloader",
+            cashier=self.cashier,
+            subtotal=Decimal("200.00"),
+            tax=Decimal("10.00"),
+            discount=Decimal("0.00"),
+            tip=Decimal("0.00"),
+            total=Decimal("210.00"),
+            status="UNPAID",
+        )
+
+        # 1. Download endpoint returns attachment
+        url_download = reverse("restaurant:cashier_download_bill", kwargs={"bill_id": bill.id})
+        resp_download = self.client.get(url_download)
+        self.assertEqual(resp_download.status_code, 200)
+        self.assertIn("attachment; filename=", resp_download.headers.get("Content-Disposition", ""))
+        self.assertIn(f"FoodWaves_Invoice_Bill_{bill.id}.html", resp_download.headers.get("Content-Disposition", ""))
+        self.assertContains(resp_download, "Invoice Downloader")
+
+        # 2. Receipt endpoint with ?download=1 query param
+        url_receipt_download = f"{reverse('restaurant:cashier_receipt', kwargs={'bill_id': bill.id})}?download=1"
+        resp_receipt_dl = self.client.get(url_receipt_download)
+        self.assertEqual(resp_receipt_dl.status_code, 200)
+        self.assertIn("attachment; filename=", resp_receipt_dl.headers.get("Content-Disposition", ""))
+
+
+# ==============================================================================
+# WAITER RESERVATION VIEWING & TABLE ASSIGNMENT TESTS
+# ==============================================================================
+
+class WaiterReservationAndTableAssignmentTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+
+        # Role Groups
+        self.waiter_group, _ = Group.objects.get_or_create(name="WAITER")
+        self.customer_group, _ = Group.objects.get_or_create(name="CUSTOMER")
+        self.chef_group, _ = Group.objects.get_or_create(name="CHEF")
+
+        # Waiter User
+        self.waiter = User.objects.create_user(
+            username="waiter_sam",
+            email="waiter_sam@foodwaves.test",
+            password="Password123",
+            first_name="Sam",
+            is_active=True,
+        )
+        self.waiter.groups.add(self.waiter_group)
+
+        # Customer User
+        self.customer = User.objects.create_user(
+            username="ananya_sen",
+            email="ananya@example.com",
+            password="Password123",
+            first_name="Ananya",
+            is_active=True,
+        )
+        self.customer.groups.add(self.customer_group)
+        UserProfile.objects.create(user=self.customer, phone_number="9876543210", is_email_verified=True)
+
+        # Chef User
+        self.chef = User.objects.create_user(
+            username="chef_arjun",
+            email="chef_arjun@foodwaves.test",
+            password="Password123",
+            is_active=True,
+        )
+        self.chef.groups.add(self.chef_group)
+
+        # Tables
+        self.table_1 = RestaurantTable.objects.create(
+            table_number="T-01",
+            capacity=4,
+            floor_area="INDOOR",
+            status="AVAILABLE",
+        )
+        self.table_2 = RestaurantTable.objects.create(
+            table_number="T-02",
+            capacity=6,
+            floor_area="WINDOW",
+            status="AVAILABLE",
+        )
+
+        # Today's Reservation
+        self.today = timezone.localdate()
+        self.reservation_today = Reservation.objects.create(
+            user=self.customer,
+            name="Ananya Sen",
+            email="ananya@example.com",
+            phone_number="9876543210",
+            date=self.today,
+            time="07:30 PM",
+            guests=4,
+            seating_preference="Window",
+            special_requests="Window side table for wedding anniversary",
+            status="CONFIRMED",
+        )
+
+        # Future Reservation
+        self.future_date = self.today + timedelta(days=2)
+        self.reservation_future = Reservation.objects.create(
+            user=self.customer,
+            name="Ananya Sen Future",
+            email="ananya@example.com",
+            phone_number="9876543210",
+            date=self.future_date,
+            time="08:00 PM",
+            guests=2,
+            seating_preference="Indoor",
+            status="CONFIRMED",
+        )
+
+    def test_waiter_can_view_reservations_on_dashboard_and_reservations_page(self):
+        self.client.force_login(self.waiter)
+
+        # 1. Waiter Floor Dashboard shows today's reserved guests
+        resp_dashboard = self.client.get(reverse("restaurant:waiter_dashboard"))
+        self.assertEqual(resp_dashboard.status_code, 200)
+        self.assertContains(resp_dashboard, "Ananya Sen")
+        self.assertContains(resp_dashboard, "07:30 PM")
+        self.assertContains(resp_dashboard, "4 Guests")
+        self.assertContains(resp_dashboard, "9876543210")
+        self.assertContains(resp_dashboard, "Today's Reserved Guests")
+
+        # 2. Dedicated Waiter Reservations Portal
+        resp_reservations = self.client.get(reverse("restaurant:waiter_reservations"))
+        self.assertEqual(resp_reservations.status_code, 200)
+        self.assertContains(resp_reservations, "Ananya Sen")
+        self.assertContains(resp_reservations, "ananya@example.com")
+        self.assertContains(resp_reservations, "wedding anniversary")
+        self.assertContains(resp_reservations, "No Table Assigned Yet")
+
+        # Filter by UPCOMING date
+        resp_upcoming = self.client.get(reverse("restaurant:waiter_reservations"), {"date": "UPCOMING"})
+        self.assertEqual(resp_upcoming.status_code, 200)
+        self.assertContains(resp_upcoming, "Ananya Sen Future")
+
+        # Search by query
+        resp_search = self.client.get(reverse("restaurant:waiter_reservations"), {"q": "9876543210"})
+        self.assertEqual(resp_search.status_code, 200)
+        self.assertContains(resp_search, "Ananya Sen")
+
+    def test_waiter_assigns_table_to_reservation(self):
+        self.client.force_login(self.waiter)
+
+        assign_url = reverse("restaurant:waiter_assign_table", kwargs={"reservation_id": self.reservation_today.id})
+        resp = self.client.post(assign_url, {"table_id": self.table_2.id})
+        self.assertEqual(resp.status_code, 302)
+
+        self.reservation_today.refresh_from_db()
+        self.table_2.refresh_from_db()
+
+        self.assertEqual(self.reservation_today.table, self.table_2)
+        # Assigning immediately opens the table so it is ready to take orders
+        self.assertEqual(self.table_2.status, "OCCUPIED")
+        self.assertIsNotNone(self.table_2.current_session)
+        self.assertEqual(self.table_2.current_session.guest_name, self.reservation_today.name)
+
+        # Customer booking history shows the assigned table
+        self.client.force_login(self.customer)
+        resp_history = self.client.get(reverse("restaurant:booking_history"))
+        self.assertEqual(resp_history.status_code, 200)
+        self.assertContains(resp_history, f"Table {self.table_2.table_number}")
+        self.assertContains(resp_history, "Window View")
+
+    def test_waiter_unassigns_table_from_reservation(self):
+        self.client.force_login(self.waiter)
+
+        # First assign table 1
+        assign_url = reverse("restaurant:waiter_assign_table", kwargs={"reservation_id": self.reservation_today.id})
+        self.client.post(assign_url, {"table_id": self.table_1.id})
+        self.table_1.refresh_from_db()
+        self.assertEqual(self.table_1.status, "OCCUPIED")
+        self.assertIsNotNone(self.table_1.current_session)
+
+        # Now unassign
+        unassign_url = reverse("restaurant:waiter_unassign_table", kwargs={"reservation_id": self.reservation_today.id})
+        resp = self.client.post(unassign_url)
+        self.assertEqual(resp.status_code, 302)
+
+        self.reservation_today.refresh_from_db()
+        self.table_1.refresh_from_db()
+
+        self.assertIsNone(self.reservation_today.table)
+        self.assertEqual(self.table_1.status, "AVAILABLE")
+        self.assertIsNone(self.table_1.current_session)
+
+    def test_waiter_seats_reservation_directly(self):
+        self.client.force_login(self.waiter)
+
+        # Assign table 1 first
+        self.reservation_today.table = self.table_1
+        self.reservation_today.save()
+        self.table_1.status = "RESERVED"
+        self.table_1.save()
+
+        seat_url = reverse("restaurant:waiter_seat_reservation", kwargs={"reservation_id": self.reservation_today.id})
+        resp = self.client.post(seat_url)
+        self.assertEqual(resp.status_code, 302)
+        self.assertRedirects(resp, reverse("restaurant:waiter_table_detail", kwargs={"table_id": self.table_1.id}))
+
+        self.reservation_today.refresh_from_db()
+        self.table_1.refresh_from_db()
+
+        self.assertEqual(self.reservation_today.status, "ARRIVED")
+        self.assertEqual(self.table_1.status, "OCCUPIED")
+
+        session = self.table_1.current_session
+        self.assertIsNotNone(session)
+        self.assertEqual(session.guest_name, "Ananya Sen")
+        self.assertEqual(session.guest_count, 4)
+        self.assertEqual(session.customer, self.customer)
+        self.assertEqual(session.waiter, self.waiter)
+        self.assertEqual(session.reservation, self.reservation_today)
+
+    def test_waiter_seats_reservation_via_table_detail_page(self):
+        self.client.force_login(self.waiter)
+
+        # Table detail shows option to seat this reservation
+        detail_url = reverse("restaurant:waiter_table_detail", kwargs={"table_id": self.table_1.id})
+        resp_detail = self.client.get(detail_url)
+        self.assertEqual(resp_detail.status_code, 200)
+        self.assertContains(resp_detail, "Ananya Sen")
+
+        # Seat via waiter_table_open with reservation_id
+        open_url = reverse("restaurant:waiter_table_open", kwargs={"table_id": self.table_1.id})
+        resp_open = self.client.post(open_url, {"reservation_id": self.reservation_today.id})
+        self.assertEqual(resp_open.status_code, 302)
+
+        self.reservation_today.refresh_from_db()
+        self.table_1.refresh_from_db()
+
+        self.assertEqual(self.reservation_today.status, "ARRIVED")
+        self.assertEqual(self.reservation_today.table, self.table_1)
+        self.assertEqual(self.table_1.status, "OCCUPIED")
+
+    def test_unauthorized_users_cannot_access_waiter_reservation_endpoints(self):
+        # 1. Anonymous user redirected to login
+        url_reservations = reverse("restaurant:waiter_reservations")
+        resp_anon = self.client.get(url_reservations)
+        self.assertEqual(resp_anon.status_code, 302)
+        self.assertIn(reverse("restaurant:login"), resp_anon.url)
+
+        # 2. Customer user gets 403 Forbidden
+        self.client.force_login(self.customer)
+        resp_cust = self.client.get(url_reservations)
+        self.assertEqual(resp_cust.status_code, 403)
+
+        # 3. Chef gets 403 Forbidden
+        self.client.force_login(self.chef)
+        resp_chef = self.client.get(url_reservations)
+        self.assertEqual(resp_chef.status_code, 403)
+
+        assign_url = reverse("restaurant:waiter_assign_table", kwargs={"reservation_id": self.reservation_today.id})
+        resp_assign = self.client.post(assign_url, {"table_id": self.table_1.id})
+        self.assertEqual(resp_assign.status_code, 403)
+
+
+class ChefOrderWorkflowTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+
+        # Groups
+        self.waiter_group, _ = Group.objects.get_or_create(name="WAITER")
+        self.chef_group, _ = Group.objects.get_or_create(name="CHEF")
+        self.customer_group, _ = Group.objects.get_or_create(name="CUSTOMER")
+
+        # Users
+        self.waiter = User.objects.create_user(
+            username="waiter_rahul",
+            email="rahul@foodwaves.test",
+            password="Password123",
+            first_name="Rahul",
+            is_active=True,
+        )
+        self.waiter.groups.add(self.waiter_group)
+
+        self.chef = User.objects.create_user(
+            username="chef_vikram",
+            email="vikram@foodwaves.test",
+            password="Password123",
+            first_name="Vikram",
+            is_active=True,
+        )
+        self.chef.groups.add(self.chef_group)
+
+        self.customer = User.objects.create_user(
+            username="cust_priya",
+            email="priya@example.com",
+            password="Password123",
+            first_name="Priya",
+            is_active=True,
+        )
+        self.customer.groups.add(self.customer_group)
+        UserProfile.objects.create(user=self.customer, phone_number="9876500000", is_email_verified=True)
+
+        # Category and Menu Items
+        self.category = MenuCategory.objects.create(name="Main Course", description="Delicious main course")
+        self.item_biryani = MenuItem.objects.create(
+            name="Dum Biryani",
+            description="Fragrant Dum Biryani",
+            category=self.category,
+            price=Decimal("320.00"),
+            is_available=True,
+            is_active=True,
+        )
+        self.item_paneer = MenuItem.objects.create(
+            name="Paneer Butter Masala",
+            description="Creamy cottage cheese curry",
+            category=self.category,
+            price=Decimal("260.00"),
+            is_available=True,
+            is_active=True,
+        )
+
+        # Tables & Sessions
+        self.table_waiter = RestaurantTable.objects.create(
+            table_number="T-07",
+            capacity=4,
+            floor_area="INDOOR",
+            status="OCCUPIED",
+        )
+        self.session_waiter = TableSession.objects.create(
+            table=self.table_waiter,
+            guest_name="Karan",
+            guest_count=2,
+            waiter=self.waiter,
+            status="ACTIVE",
+        )
+
+        self.table_customer = RestaurantTable.objects.create(
+            table_number="T-08",
+            capacity=2,
+            floor_area="WINDOW",
+            status="OCCUPIED",
+        )
+        self.session_customer = TableSession.objects.create(
+            table=self.table_customer,
+            guest_name="Priya",
+            guest_count=2,
+            customer=self.customer,
+            status="ACTIVE",
+        )
+
+    def test_chef_kds_and_dashboard_display_item_and_table_for_waiter_order(self):
+        # 1. Waiter places order for Table T-07
+        order = Order.objects.create(
+            session=self.session_waiter,
+            placed_by=self.waiter,
+            source="WAITER",
+            status="PENDING",
+        )
+        order_item = OrderItem.objects.create(
+            order=order,
+            menu_item=self.item_biryani,
+            quantity=2,
+            unit_price=self.item_biryani.price,
+            special_instructions="Extra spicy, no raita",
+            status="PENDING",
+        )
+
+        self.assertEqual(order.table_display, "Table T-07")
+        self.assertEqual(order_item.table_display, "Table T-07")
+        self.assertIn("Waiter (Rahul)", order.source_display)
+
+        # 2. Chef views KDS and Dashboard
+        self.client.force_login(self.chef)
+
+        # Check Chef Dashboard
+        resp_dash = self.client.get(reverse("restaurant:chef_dashboard"))
+        self.assertEqual(resp_dash.status_code, 200)
+        self.assertContains(resp_dash, "Dum Biryani")
+        self.assertContains(resp_dash, "Table T-07")
+        self.assertContains(resp_dash, "Extra spicy, no raita")
+        self.assertContains(resp_dash, "Waiter: Rahul")
+
+        # Check Chef KDS
+        resp_kds = self.client.get(reverse("restaurant:chef_kds"))
+        self.assertEqual(resp_kds.status_code, 200)
+        self.assertContains(resp_kds, "Dum Biryani")
+        self.assertContains(resp_kds, "Table T-07")
+        self.assertContains(resp_kds, "Waiter Order")
+
+    def test_chef_kds_and_dashboard_display_item_and_table_for_customer_order(self):
+        # 1. Customer places order for Table T-08
+        order = Order.objects.create(
+            session=self.session_customer,
+            placed_by=self.customer,
+            source="CUSTOMER",
+            status="PENDING",
+        )
+        order_item = OrderItem.objects.create(
+            order=order,
+            menu_item=self.item_paneer,
+            quantity=1,
+            unit_price=self.item_paneer.price,
+            special_instructions="Mild spicy with butter on top",
+            status="PENDING",
+        )
+
+        self.assertEqual(order.table_display, "Table T-08")
+        self.assertEqual(order_item.table_display, "Table T-08")
+        self.assertIn("Customer", order.source_display)
+
+        # 2. Chef views KDS and Dashboard
+        self.client.force_login(self.chef)
+
+        # Check Chef Dashboard
+        resp_dash = self.client.get(reverse("restaurant:chef_dashboard"))
+        self.assertEqual(resp_dash.status_code, 200)
+        self.assertContains(resp_dash, "Paneer Butter Masala")
+        self.assertContains(resp_dash, "Table T-08")
+        self.assertContains(resp_dash, "Mild spicy with butter on top")
+        self.assertContains(resp_dash, "Customer QR: Priya")
+
+        # Check Chef KDS
+        resp_kds = self.client.get(reverse("restaurant:chef_kds"))
+        self.assertEqual(resp_kds.status_code, 200)
+        self.assertContains(resp_kds, "Paneer Butter Masala")
+        self.assertContains(resp_kds, "Table T-08")
+        self.assertContains(resp_kds, "Customer QR")
+
+    def test_chef_marks_status_completed(self):
+        order = Order.objects.create(
+            session=self.session_waiter,
+            placed_by=self.waiter,
+            source="WAITER",
+            status="PENDING",
+        )
+        order_item = OrderItem.objects.create(
+            order=order,
+            menu_item=self.item_biryani,
+            quantity=1,
+            unit_price=self.item_biryani.price,
+            status="PENDING",
+        )
+
+        self.client.force_login(self.chef)
+        status_url = reverse("restaurant:chef_item_status", kwargs={"item_id": order_item.id})
+
+        # Chef clicks "Completed"
+        resp = self.client.post(status_url, {"status": "COMPLETED"})
+        self.assertEqual(resp.status_code, 302)
+
+        order_item.refresh_from_db()
+        self.assertEqual(order_item.status, "READY")
+        self.assertIsNotNone(order_item.ready_at)
+
+        # Waiter table detail reflects dish ready to serve
+        self.client.force_login(self.waiter)
+        resp_table = self.client.get(reverse("restaurant:waiter_table_detail", kwargs={"table_id": self.table_waiter.id}))
+        self.assertEqual(resp_table.status_code, 200)
+        self.assertContains(resp_table, "Serve ✓")
+
+    def test_chef_marks_status_not_available(self):
+        order = Order.objects.create(
+            session=self.session_waiter,
+            placed_by=self.waiter,
+            source="WAITER",
+            status="PENDING",
+        )
+        order_item = OrderItem.objects.create(
+            order=order,
+            menu_item=self.item_paneer,
+            quantity=1,
+            unit_price=self.item_paneer.price,
+            status="PENDING",
+        )
+
+        self.client.force_login(self.chef)
+        status_url = reverse("restaurant:chef_item_status", kwargs={"item_id": order_item.id})
+
+        # Chef clicks "Not Available"
+        resp = self.client.post(status_url, {"status": "NOT_AVAILABLE"})
+        self.assertEqual(resp.status_code, 302)
+
+        order_item.refresh_from_db()
+        self.assertEqual(order_item.status, "CANCELLED")
+
+        # Menu item is automatically marked out-of-stock
+        self.item_paneer.refresh_from_db()
+        self.assertFalse(self.item_paneer.is_available)
+        self.assertEqual(self.item_paneer.availability_updated_by, self.chef)
+
+        # Waiter view shows "Not Available"
+        self.client.force_login(self.waiter)
+        resp_waiter = self.client.get(reverse("restaurant:waiter_table_detail", kwargs={"table_id": self.table_waiter.id}))
+        self.assertEqual(resp_waiter.status_code, 200)
+        self.assertContains(resp_waiter, "Not Available")
+
+    def test_chef_portal_zero_orders_initially_and_displays_only_on_order(self):
+        self.client.force_login(self.chef)
+
+        # 1. Initially 0 orders exist
+        resp_dash = self.client.get(reverse("restaurant:chef_dashboard"))
+        self.assertEqual(resp_dash.status_code, 200)
+        self.assertEqual(resp_dash.context["active_orders"].count(), 0)
+        self.assertEqual(resp_dash.context["active_items_queue"].count(), 0)
+        self.assertContains(resp_dash, "No orders currently cooking")
+
+        resp_kds = self.client.get(reverse("restaurant:chef_kds"))
+        self.assertEqual(resp_kds.status_code, 200)
+        self.assertEqual(resp_kds.context["orders"].count(), 0)
+        self.assertContains(resp_kds, "Kitchen Queue is Clear!")
+
+        # 2. Waiter places an order on active table session
+        order = Order.objects.create(
+            session=self.session_waiter,
+            placed_by=self.waiter,
+            source="WAITER",
+            status="PENDING",
+        )
+        OrderItem.objects.create(
+            order=order,
+            menu_item=self.item_biryani,
+            quantity=1,
+            unit_price=self.item_biryani.price,
+            status="PENDING",
+        )
+
+        # Now chef portal immediately shows the new order
+        resp_dash = self.client.get(reverse("restaurant:chef_dashboard"))
+        self.assertEqual(resp_dash.context["active_orders"].count(), 1)
+        self.assertEqual(resp_dash.context["active_items_queue"].count(), 1)
+        self.assertContains(resp_dash, "Dum Biryani")
+        self.assertContains(resp_dash, "Table T-07")
+
+        resp_kds = self.client.get(reverse("restaurant:chef_kds"))
+        self.assertEqual(resp_kds.context["orders"].count(), 1)
+        self.assertContains(resp_kds, "Dum Biryani")
+        self.assertContains(resp_kds, "Table T-07")
+
+        # 3. Cashier direct order or closed session orders do not appear in chef kitchen queue
+        cashier_order = Order.objects.create(
+            session=None,
+            source="CASHIER",
+            status="SERVED",
+        )
+        OrderItem.objects.create(
+            order=cashier_order,
+            menu_item=self.item_biryani,
+            quantity=1,
+            unit_price=self.item_biryani.price,
+            status="SERVED",
+        )
+        # Still only 1 active kitchen order
+        resp_dash = self.client.get(reverse("restaurant:chef_dashboard"))
+        self.assertEqual(resp_dash.context["active_orders"].count(), 1)
+
+
 
 
 

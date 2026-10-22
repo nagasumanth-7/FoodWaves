@@ -253,11 +253,13 @@
                       <span style="color: var(--text-dim);">(~{{ item.estimated_minutes }}m)</span>
                     {% endif %}
                   {% elif item.status == 'READY' %}
-                    <span>✨ Ready! Server bringing dish</span>
+                    <span>✨ Food Completed! Server bringing dish</span>
                   {% elif item.status == 'SERVED' %}
                     <span>✓ Served to Table</span>
+                  {% elif item.status == 'CANCELLED' %}
+                    <span style="color: #f87171; font-weight: 700;">⚠️ Not Available in Kitchen (Cancelled)</span>
                   {% else %}
-                    <span>{{ item.get_status_display }}</span>
+                    <span style="color: #fbbf24;">⏳ Received by Kitchen (Queued)</span>
                   {% endif %}
                 </div>
               </div>

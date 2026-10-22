@@ -1,0 +1,95 @@
+{% extends "restaurant/base.html" %}
+{% load static %}
+
+{% block title %}Authenticating... | Food Waves Luxury Dining{% endblock %}
+
+{% block head %}
+  <style>
+    .callback-shell {
+      min-height: calc(100vh - 170px);
+      padding: 140px 20px 90px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: 
+        radial-gradient(circle at 50% 30%, rgba(6, 182, 212, 0.16), transparent 55%),
+        linear-gradient(180deg, #030813 0%, #061124 100%);
+    }
+
+    .callback-card {
+      width: min(500px, 100%);
+      background: rgba(9, 23, 44, 0.85);
+      border: 1px solid var(--border-glass);
+      border-radius: var(--radius-xl);
+      padding: 48px 36px;
+      text-align: center;
+      backdrop-filter: blur(24px);
+      box-shadow: var(--shadow-3d);
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 3px solid rgba(6, 182, 212, 0.2);
+      border-top-color: var(--cyan);
+      border-radius: 50%;
+      margin: 0 auto 24px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <section class="callback-shell">
+    <div class="callback-card card-3d">
+      <div class="spinner"></div>
+      <h2 style="color: #ffffff; margin: 0 0 10px; font-size: 24px;">Authenticating with Supabase...</h2>
+      <p style="color: var(--text-muted); font-size: 14px; margin: 0 0 24px;">
+        Please wait a moment while we verify your session.
+      </p>
+      <noscript>
+        <p style="color: var(--cyan); font-size: 13px;">
+          JavaScript is disabled. <a href="{% url 'restaurant:login' %}" style="color: var(--gold-light);">Click here to proceed to Sign In →</a>
+        </p>
+      </noscript>
+    </div>
+  </section>
+
+  <script>
+    (function() {
+      // Check for access_token or recovery type in hash fragment (Supabase redirect)
+      const hash = window.location.hash ? window.location.hash.substring(1) : '';
+      const params = new URLSearchParams(hash);
+      const accessToken = params.get('access_token');
+      const tokenType = params.get('type');
+      const errorCode = params.get('error') || params.get('error_code');
+      const errorDesc = params.get('error_description');
+
+      // Check query params
+      const qParams = new URLSearchParams(window.location.search);
+      const qError = qParams.get('error') || qParams.get('error_code');
+      const qErrorDesc = qParams.get('error_description');
+
+      if (errorCode || qError) {
+        window.location.href = "{% url 'restaurant:verification_sent' %}?error=" + encodeURIComponent(errorCode || qError) + "&error_description=" + encodeURIComponent(errorDesc || qErrorDesc || '');
+        return;
+      }
+
+      if (tokenType === 'recovery') {
+        // Password recovery flow: forward hash fragment directly to reset password page
+        window.location.href = "{% url 'restaurant:reset_password' %}#" + hash;
+        return;
+      }
+
+      // Email verification / signup flow
+      setTimeout(function() {
+        window.location.href = "{% url 'restaurant:login' %}?confirmed=true";
+      }, 500);
+    })();
+  </script>
+{% endblock %}
+

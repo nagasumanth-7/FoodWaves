@@ -97,9 +97,12 @@
 <div class="settle-shell">
   <div class="settle-container">
 
-    <div style="margin-bottom: 20px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
       <a href="{% url 'restaurant:cashier_dashboard' %}" style="color: var(--text-secondary); text-decoration: none; font-size: 13px;">
         ← Back to Cashier Dashboard
+      </a>
+      <a href="{% url 'restaurant:cashier_receipt' bill.id %}" class="button" style="background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.2); color: #ffffff; font-size: 13px; text-decoration: none; padding: 6px 14px;">
+        🧾 View / Print / Download Bill
       </a>
     </div>
 

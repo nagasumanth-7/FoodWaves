@@ -15,6 +15,8 @@ urlpatterns = [
     path("login/", views.login_page, name="login"),
     path("signup/", views.signup_page, name="signup"),
     path("logout/", views.logout_view, name="logout"),
+    path("forgot-password/", views.forgot_password_page, name="forgot_password"),
+    path("reset-password/", views.reset_password_page, name="reset_password"),
     path("verification-sent/", views.verification_sent, name="verification_sent"),
     path("verify-email/<str:uidb64>/<str:token>/", views.verify_email, name="verify_email"),
     path("resend-verification/", views.resend_verification, name="resend_verification"),
@@ -37,6 +39,7 @@ urlpatterns = [
     path("manager/tables/qr/", views.manager_table_qr_view, name="manager_tables_qr_all"),
     path("manager/tables/<int:table_id>/qr/", views.manager_table_qr_view, name="manager_table_qr_view"),
     path("manager/tables/<int:table_id>/qr/image/", views.manager_table_qr_image, name="manager_table_qr_image"),
+    path("manager/reports/", views.manager_reports, name="manager_reports"),
 
     # Customer QR Table Ordering Portal (Sections 2, 10, 14-16, 18)
     path("table/<str:qr_token>/", views.table_menu, name="table_menu"),
@@ -55,6 +58,10 @@ urlpatterns = [
 
     # Floor Waiter Portal
     path("waiter/", views.waiter_dashboard, name="waiter_dashboard"),
+    path("waiter/reservations/", views.waiter_reservations, name="waiter_reservations"),
+    path("waiter/reservations/<int:reservation_id>/assign/", views.waiter_assign_table, name="waiter_assign_table"),
+    path("waiter/reservations/<int:reservation_id>/unassign/", views.waiter_unassign_table, name="waiter_unassign_table"),
+    path("waiter/reservations/<int:reservation_id>/seat/", views.waiter_seat_reservation, name="waiter_seat_reservation"),
     path("waiter/table/<int:table_id>/", views.waiter_table_detail, name="waiter_table_detail"),
     path("waiter/table/<int:table_id>/open/", views.waiter_table_open, name="waiter_table_open"),
     path("waiter/table/<int:table_id>/order/", views.waiter_take_order, name="waiter_take_order"),
@@ -67,6 +74,7 @@ urlpatterns = [
     path("cashier/bill/<int:bill_id>/settle/", views.cashier_settle_bill, name="cashier_settle_bill"),
     path("cashier/table/<int:table_id>/generate-bill/", views.cashier_generate_bill, name="cashier_generate_bill"),
     path("cashier/bill/<int:bill_id>/receipt/", views.cashier_receipt, name="cashier_receipt"),
+    path("cashier/bill/<int:bill_id>/download/", views.cashier_download_bill, name="cashier_download_bill"),
     path("cashier/reports/", views.cashier_reports, name="cashier_reports"),
 
     # Validation APIs (Section 15 & 16)

@@ -191,11 +191,16 @@ def update_order_status(order_id, new_status):
 
 def get_kitchen_active_orders():
     """
-    Section 17: Retrieves all orders for KDS display from both CUSTOMER and WAITER.
+    Section 17: Retrieves all live kitchen orders placed by CUSTOMER or WAITER.
+    Only displays orders for active or bill-pending dining sessions.
     """
     return (
-        Order.objects.filter(status__in=["PENDING", "ACCEPTED", "PREPARING", "READY"])
-        .select_related("session__table", "placed_by")
+        Order.objects.filter(
+            source__in=["CUSTOMER", "WAITER"],
+            status__in=["PENDING", "ACCEPTED", "PREPARING", "READY"],
+            session__status__in=["ACTIVE", "BILL_PENDING"],
+        )
+        .select_related("session__table", "session", "placed_by")
         .prefetch_related("items__menu_item")
         .order_by("created_at")
     )

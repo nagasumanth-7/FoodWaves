@@ -257,6 +257,24 @@ class Order(models.Model):
     def order_total(self):
         return sum(item.subtotal for item in self.items.exclude(status="CANCELLED"))
 
+    @property
+    def table_display(self):
+        if self.session and hasattr(self.session, "table") and self.session.table:
+            return f"Table {self.session.table.table_number}"
+        elif self.bill:
+            return self.bill.display_title
+        return "Direct Order"
+
+    @property
+    def source_display(self):
+        if self.source == "WAITER":
+            waiter_name = self.placed_by.get_full_name() or self.placed_by.username if self.placed_by else "Waiter"
+            return f"Waiter ({waiter_name})"
+        elif self.source == "CUSTOMER":
+            guest = self.session.guest_name if self.session and self.session.guest_name else "Customer"
+            return f"Customer ({guest})"
+        return self.get_source_display()
+
 
 class OrderItem(models.Model):
     STATUS_CHOICES = [
@@ -296,6 +314,14 @@ class OrderItem(models.Model):
     @property
     def total_price(self):
         return self.subtotal
+
+    @property
+    def table_display(self):
+        return self.order.table_display if self.order else "Table Unknown"
+
+    @property
+    def source_display(self):
+        return self.order.source_display if self.order else "Unknown"
 
 
 class Bill(models.Model):

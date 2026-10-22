@@ -60,3 +60,8 @@ def cashier_required(view_func):
     return role_required(["CASHIER", "ADMIN"])(view_func)
 
 
+def cashier_or_manager_required(view_func):
+    """Restricts view to CASHIER, MANAGER, and ADMIN roles."""
+    return role_required(["CASHIER", "MANAGER", "ADMIN"])(view_func)
+
+

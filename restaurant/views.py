@@ -33,6 +33,8 @@ from .models import (
 from .forms import (
     SignUpForm,
     LoginForm,
+    ForgotPasswordForm,
+    ResetPasswordForm,
     ReservationForm,
     MenuCategoryForm,
     MenuItemForm,
@@ -46,8 +48,17 @@ from .supabase_auth import (
     supabase_sign_in,
     supabase_resend_confirmation,
     supabase_sign_out,
+    supabase_reset_password_request,
+    supabase_update_user_password,
+    supabase_verify_token,
 )
-from .permissions import manager_required, chef_required, waiter_required, cashier_required
+from .permissions import (
+    manager_required,
+    chef_required,
+    waiter_required,
+    cashier_required,
+    cashier_or_manager_required,
+)
 from .services.menu_service import (
     get_active_categories,
     get_active_menu_items,
@@ -73,6 +84,10 @@ from .services.table_service import (
     open_table_session,
     close_table_session,
     set_table_bill_pending,
+    get_reservations_for_waiter,
+    assign_table_to_reservation,
+    unassign_table_from_reservation,
+    seat_reservation,
 )
 from .services.billing_service import (
     calculate_and_generate_bill,
@@ -81,6 +96,7 @@ from .services.billing_service import (
     record_payment_failure,
     get_unpaid_bills,
     get_daily_cashier_summary,
+    get_sales_report_summary,
     create_direct_counter_bill,
     GST_RATE,
 )
@@ -328,7 +344,7 @@ def resend_verification(request):
 
 def auth_callback(request):
     """
-    Callback endpoint triggered when user clicks the Supabase email confirmation link.
+    Callback endpoint triggered when user clicks a Supabase email confirmation or recovery link.
     Supabase verifies the token and redirects the browser here.
     """
     error = request.GET.get("error") or request.GET.get("error_code")
@@ -336,12 +352,205 @@ def auth_callback(request):
     if error or error_desc:
         messages.error(
             request,
-            f"Email confirmation failed: {error_desc or error}. Please request a new confirmation email.",
+            f"Authentication link failed: {error_desc or error}. Please request a new link.",
         )
         return redirect("restaurant:verification_sent")
 
+    flow_type = request.GET.get("type", "").lower()
+    token_hash = request.GET.get("token_hash")
+
+    if flow_type == "recovery" or request.GET.get("next") == "reset-password":
+        return redirect(reverse("restaurant:reset_password") + (f"?token_hash={token_hash}" if token_hash else ""))
+
+    # If Supabase provided token_hash for email verification
+    if token_hash:
+        try:
+            supabase_verify_token(token_hash, type_="email")
+        except Exception:
+            pass
+
     messages.success(request, "Your email address has been confirmed! Please sign in with your password to continue.")
     return redirect("restaurant:login")
+
+
+def forgot_password_page(request):
+    """
+    Customer requests a password recovery email using Supabase Auth.
+    Supports standard HTML forms as well as AJAX JSON requests.
+    """
+    is_ajax = request.headers.get("x-requested-with") == "XMLHttpRequest"
+
+    if request.user.is_authenticated:
+        if is_ajax:
+            return JsonResponse({"success": False, "error": "Already logged in."}, status=400)
+        return redirect("restaurant:home")
+
+    if request.method == "POST":
+        form = ForgotPasswordForm(request.POST)
+        if form.is_valid():
+            email = form.cleaned_data["email"].strip().lower()
+            callback_url = request.build_absolute_uri(reverse("restaurant:reset_password"))
+            success, err_msg = supabase_reset_password_request(email, redirect_to=callback_url)
+
+            if success:
+                msg = f"A password reset link has been dispatched by Supabase to {email}. Please check your inbox."
+                messages.success(request, msg)
+                request.session["reset_email"] = email
+                if is_ajax:
+                    return JsonResponse({"success": True, "message": msg, "email": email})
+                return render(request, "restaurant/forgot_password_sent.html", {"email": email})
+            else:
+                # Fallback to local Django mail if user exists
+                local_user = User.objects.filter(email__iexact=email).first()
+                if local_user:
+                    uidb64 = urlsafe_base64_encode(force_bytes(local_user.pk))
+                    token = default_token_generator.make_token(local_user)
+                    reset_url = request.build_absolute_uri(
+                        f"{reverse('restaurant:reset_password')}?uidb64={uidb64}&token={token}"
+                    )
+                    try:
+                        send_mail(
+                            subject="Reset your Food Waves Password",
+                            message=(
+                                f"Hello {local_user.first_name or 'Food Waves Guest'},\n\n"
+                                f"We received a request to reset your password.\n\n"
+                                f"Click the link below to set a new password:\n{reset_url}\n\n"
+                                f"Warm regards,\nFood Waves Team"
+                            ),
+                            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "Food Waves <noreply@foodwaves.com>"),
+                            recipient_list=[email],
+                            fail_silently=False,
+                        )
+                        msg = f"A password reset link has been dispatched to {email}. Please check your inbox."
+                        messages.success(request, msg)
+                        request.session["reset_email"] = email
+                        if is_ajax:
+                            return JsonResponse({"success": True, "message": msg, "email": email})
+                        return render(request, "restaurant/forgot_password_sent.html", {"email": email})
+                    except Exception as mail_err:
+                        err_text = f"Password reset request failed: {err_msg} ({mail_err})"
+                        messages.error(request, err_text)
+                        if is_ajax:
+                            return JsonResponse({"success": False, "error": err_text}, status=400)
+                else:
+                    err_text = f"Password reset request failed: {err_msg}"
+                    messages.error(request, err_text)
+                    if is_ajax:
+                        return JsonResponse({"success": False, "error": err_text}, status=400)
+        else:
+            err_text = "Please enter a valid email address."
+            messages.error(request, err_text)
+            if is_ajax:
+                return JsonResponse({"success": False, "error": err_text}, status=400)
+    else:
+        form = ForgotPasswordForm()
+
+    return render(request, "restaurant/forgot_password.html", {"form": form})
+
+
+def reset_password_page(request):
+    """
+    Renders password reset form and updates user password in Supabase Auth and Django DB.
+    Handles access_token from Supabase recovery redirect (hash fragment or query params)
+    as well as Django uidb64/token fallback.
+    """
+    if request.user.is_authenticated:
+        return redirect("restaurant:home")
+
+    # Check for error in query params from Supabase redirect
+    error = request.GET.get("error") or request.GET.get("error_code")
+    error_desc = request.GET.get("error_description")
+    if error or error_desc:
+        messages.error(request, f"Password reset link is invalid or expired: {error_desc or error}. Please request a new link.")
+        return redirect("restaurant:forgot_password")
+
+    uidb64 = request.GET.get("uidb64") or request.POST.get("uidb64")
+    token = request.GET.get("token") or request.POST.get("token")
+    token_hash = request.GET.get("token_hash") or request.POST.get("token_hash")
+
+    if request.method == "POST":
+        form = ResetPasswordForm(request.POST)
+        if form.is_valid():
+            new_password = form.cleaned_data["new_password"]
+            access_token = form.cleaned_data.get("access_token")
+            form_token_hash = form.cleaned_data.get("token_hash") or token_hash
+            user_email = form.cleaned_data.get("email")
+            updated = False
+
+            # 1. Update via Supabase Auth access_token
+            if access_token:
+                success, sb_user, err_msg = supabase_update_user_password(access_token, new_password)
+                if success:
+                    updated = True
+                    if sb_user and isinstance(sb_user, dict):
+                        user_email = sb_user.get("email") or user_email
+                else:
+                    messages.error(request, f"Failed to reset password with Supabase: {err_msg}")
+                    return render(request, "restaurant/reset_password.html", {"form": form, "uidb64": uidb64, "token": token, "token_hash": token_hash})
+
+            # 2. Or verify token_hash with Supabase
+            elif form_token_hash:
+                success, data, err_msg = supabase_verify_token(form_token_hash, type_="recovery")
+                if success:
+                    t_access = (data or {}).get("access_token")
+                    if t_access:
+                        s_ok, sb_user, s_err = supabase_update_user_password(t_access, new_password)
+                        if s_ok:
+                            updated = True
+                            user_email = (sb_user or {}).get("email") or user_email
+                    else:
+                        updated = True
+                        user_email = ((data or {}).get("user") or {}).get("email") or user_email
+                else:
+                    messages.error(request, f"Reset token is invalid or expired: {err_msg}")
+                    return render(request, "restaurant/reset_password.html", {"form": form, "uidb64": uidb64, "token": token, "token_hash": token_hash})
+
+            # 3. Fallback: Django token validation
+            elif uidb64 and token:
+                try:
+                    uid = force_str(urlsafe_base64_decode(uidb64))
+                    local_user = User.objects.get(pk=uid)
+                except Exception:
+                    local_user = None
+
+                if local_user and default_token_generator.check_token(local_user, token):
+                    local_user.set_password(new_password)
+                    local_user.is_active = True
+                    local_user.save()
+                    profile, _ = UserProfile.objects.get_or_create(user=local_user)
+                    profile.is_email_verified = True
+                    profile.save()
+                    updated = True
+                    user_email = local_user.email
+                else:
+                    messages.error(request, "The password reset link is invalid or has expired.")
+                    return render(request, "restaurant/reset_password.html", {"form": form, "uidb64": uidb64, "token": token, "token_hash": token_hash})
+
+            if updated:
+                # Ensure Django user password is in sync
+                if user_email:
+                    django_user = User.objects.filter(email__iexact=user_email).first()
+                    if django_user:
+                        django_user.set_password(new_password)
+                        django_user.is_active = True
+                        django_user.save()
+                        profile, _ = UserProfile.objects.get_or_create(user=django_user)
+                        profile.is_email_verified = True
+                        profile.save()
+
+                messages.success(request, "Your password has been successfully reset! Please sign in with your new password.")
+                return redirect("restaurant:login")
+            else:
+                messages.error(request, "Invalid or missing recovery session. Please use the reset link sent to your email or request a new one.")
+    else:
+        form = ResetPasswordForm(initial={"token_hash": token_hash})
+
+    return render(request, "restaurant/reset_password.html", {
+        "form": form,
+        "uidb64": uidb64,
+        "token": token,
+        "token_hash": token_hash,
+    })
 
 
 def get_user_home_url(user, next_url=None):
@@ -399,6 +608,67 @@ def login_page(request):
     unverified_email = None
 
     if request.method == "POST":
+        action = request.POST.get("action")
+        is_ajax = request.headers.get("x-requested-with") == "XMLHttpRequest"
+
+        # Handle inline forgot password request directly from the sign-in page
+        if action == "forgot_password":
+            email = (request.POST.get("email") or "").strip().lower()
+            if not email:
+                if is_ajax:
+                    return JsonResponse({"success": False, "error": "Please enter your registered email address."}, status=400)
+                messages.error(request, "Please enter your registered email address.")
+                return redirect("restaurant:login")
+
+            callback_url = request.build_absolute_uri(reverse("restaurant:reset_password"))
+            success, err_msg = supabase_reset_password_request(email, redirect_to=callback_url)
+
+            if success:
+                msg = f"A password reset link has been dispatched by Supabase to {email}. Please check your inbox."
+                messages.success(request, msg)
+                request.session["reset_email"] = email
+                if is_ajax:
+                    return JsonResponse({"success": True, "message": msg, "email": email})
+                return redirect("restaurant:login")
+            else:
+                local_user = User.objects.filter(email__iexact=email).first()
+                if local_user:
+                    uidb64 = urlsafe_base64_encode(force_bytes(local_user.pk))
+                    token = default_token_generator.make_token(local_user)
+                    reset_url = request.build_absolute_uri(
+                        f"{reverse('restaurant:reset_password')}?uidb64={uidb64}&token={token}"
+                    )
+                    try:
+                        send_mail(
+                            subject="Reset your Food Waves Password",
+                            message=(
+                                f"Hello {local_user.first_name or 'Food Waves Guest'},\n\n"
+                                f"We received a request to reset your password.\n\n"
+                                f"Click the link below to set a new password:\n{reset_url}\n\n"
+                                f"Warm regards,\nFood Waves Team"
+                            ),
+                            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", "Food Waves <noreply@foodwaves.com>"),
+                            recipient_list=[email],
+                            fail_silently=False,
+                        )
+                        msg = f"A password reset link has been dispatched to {email}. Please check your inbox."
+                        messages.success(request, msg)
+                        request.session["reset_email"] = email
+                        if is_ajax:
+                            return JsonResponse({"success": True, "message": msg, "email": email})
+                        return redirect("restaurant:login")
+                    except Exception as mail_err:
+                        err_text = f"Password reset request failed: {err_msg} ({mail_err})"
+                        messages.error(request, err_text)
+                        if is_ajax:
+                            return JsonResponse({"success": False, "error": err_text}, status=400)
+                else:
+                    err_text = f"Password reset request failed: {err_msg}"
+                    messages.error(request, err_text)
+                    if is_ajax:
+                        return JsonResponse({"success": False, "error": err_text}, status=400)
+                return redirect("restaurant:login")
+
         form = LoginForm(request.POST)
         if form.is_valid():
             email = form.cleaned_data["email"].strip().lower()
@@ -577,6 +847,15 @@ def cancel_booking(request, booking_id):
     if request.method == "POST":
         if booking.can_cancel:
             booking.status = "CANCELLED"
+            if booking.table and booking.table.status == "RESERVED":
+                other_res = Reservation.objects.filter(
+                    table=booking.table,
+                    date=booking.date,
+                    status__in=["CONFIRMED", "PENDING"],
+                ).exclude(pk=booking.pk).exists()
+                if not other_res:
+                    booking.table.status = "AVAILABLE"
+                    booking.table.save(update_fields=["status"])
             booking.save()
             messages.success(request, f"Reservation #{booking.id} has been cancelled.")
         else:
@@ -749,11 +1028,26 @@ def manager_menu_delete(request, item_id):
 
 @chef_required
 def chef_dashboard(request):
-    """Chef overview portal."""
+    """
+    Chef overview portal:
+    - Live kitchen orders queue (table number, item names, waiter/customer source)
+    - Dish preparation action controls (Completed / Not Available / Cooking)
+    - Recipe & availability metrics
+    """
     active_items = MenuItem.objects.filter(is_active=True)
     available_count = active_items.filter(is_available=True).count()
     unavailable_count = active_items.filter(is_available=False).count()
     unavailable_items = active_items.filter(is_available=False).select_related("category")
+
+    active_orders = get_kitchen_active_orders()
+    active_items_queue = OrderItem.objects.filter(
+        order__in=active_orders,
+        status__in=["PENDING", "PREPARING"]
+    ).select_related("order__session__table", "order__bill", "order__placed_by", "menu_item").order_by("created_at")
+
+    pending_items_count = active_items_queue.filter(status="PENDING").count()
+    preparing_items_count = active_items_queue.filter(status="PREPARING").count()
+    ready_items_count = OrderItem.objects.filter(order__in=active_orders, status="READY").count()
 
     return render(
         request,
@@ -763,6 +1057,11 @@ def chef_dashboard(request):
             "available_count": available_count,
             "unavailable_count": unavailable_count,
             "unavailable_items": unavailable_items,
+            "active_orders": active_orders,
+            "active_items_queue": active_items_queue,
+            "pending_items_count": pending_items_count,
+            "preparing_items_count": preparing_items_count,
+            "ready_items_count": ready_items_count,
         },
     )
 
@@ -862,6 +1161,7 @@ def waiter_dashboard(request):
     - Overview of tables (Available, Occupied, Reserved, Bill Pending)
     - Filter by status and floor area
     - Ready-to-serve dish notifications
+    - Table reservations overview & assignment
     """
     status_filter = request.GET.get("status", "ALL")
     area_filter = request.GET.get("area", "ALL")
@@ -876,6 +1176,14 @@ def waiter_dashboard(request):
 
     pending_serves = get_pending_serves_for_waiter()
 
+    # Reservations for today
+    today = timezone.localdate()
+    today_reservations = get_reservations_for_waiter(date="TODAY")
+    today_reservations_count = today_reservations.count()
+    unassigned_today_count = today_reservations.filter(table__isnull=True).count()
+    confirmed_today_count = today_reservations.filter(status="CONFIRMED").count()
+    available_tables = all_tables.filter(status__in=["AVAILABLE", "RESERVED"])
+
     return render(
         request,
         "restaurant/waiter/dashboard.html",
@@ -888,21 +1196,160 @@ def waiter_dashboard(request):
             "bill_pending_count": bill_pending_count,
             "reserved_count": reserved_count,
             "pending_serves": pending_serves,
+            "today_reservations": today_reservations,
+            "today_reservations_count": today_reservations_count,
+            "unassigned_today_count": unassigned_today_count,
+            "confirmed_today_count": confirmed_today_count,
+            "available_tables": available_tables,
+            "today_date": today,
         },
     )
+
+
+@waiter_required
+def waiter_reservations(request):
+    """
+    Comprehensive Waiter Reservations Portal:
+    - View all customer reservations (who booked, party size, preferences, special requests)
+    - Filter by date (Today, Upcoming, Past, All)
+    - Filter by status (Confirmed, Arrived, Completed, Cancelled)
+    - Filter by table assignment (Assigned, Unassigned)
+    - Assign available tables to reservations
+    - Seat reserved parties directly
+    """
+    date_filter = request.GET.get("date", "TODAY")
+    status_filter = request.GET.get("status", "ALL")
+    assignment_filter = request.GET.get("assignment", "ALL")
+    search_query = request.GET.get("q", "")
+
+    reservations = get_reservations_for_waiter(
+        date=date_filter,
+        status=status_filter,
+        search_query=search_query,
+        assignment=assignment_filter,
+    )
+    all_tables = get_all_tables()
+    available_tables = all_tables.filter(status__in=["AVAILABLE", "RESERVED"])
+
+    today = timezone.localdate()
+    today_count = Reservation.objects.filter(date=today).count()
+    upcoming_count = Reservation.objects.filter(date__gte=today).count()
+    unassigned_today_count = Reservation.objects.filter(date=today, table__isnull=True).count()
+    confirmed_today_count = Reservation.objects.filter(date=today, status="CONFIRMED").count()
+
+    return render(
+        request,
+        "restaurant/waiter/reservations.html",
+        {
+            "reservations": reservations,
+            "available_tables": available_tables,
+            "date_filter": date_filter,
+            "status_filter": status_filter,
+            "assignment_filter": assignment_filter,
+            "search_query": search_query,
+            "today_count": today_count,
+            "upcoming_count": upcoming_count,
+            "unassigned_today_count": unassigned_today_count,
+            "confirmed_today_count": confirmed_today_count,
+            "today_date": today,
+        },
+    )
+
+
+@waiter_required
+def waiter_assign_table(request, reservation_id):
+    """
+    Assigns or updates a restaurant table for a customer reservation.
+    """
+    if request.method == "POST":
+        reservation = get_object_or_404(Reservation, pk=reservation_id)
+        table_id = request.POST.get("table_id")
+        if not table_id:
+            messages.error(request, "Please select a table to assign.")
+        else:
+            table = get_table_by_id(table_id)
+            try:
+                assign_table_to_reservation(reservation, table, waiter_user=request.user)
+                messages.success(
+                    request,
+                    f"Table {table.table_number} ({table.capacity} seats, {table.get_floor_area_display()}) successfully assigned and opened for {reservation.name}! Ready to take orders."
+                )
+            except Exception as e:
+                messages.error(request, str(e))
+
+    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("restaurant:waiter_reservations")
+    return redirect(next_url)
+
+
+@waiter_required
+def waiter_unassign_table(request, reservation_id):
+    """
+    Removes table assignment from a reservation and frees the table if appropriate.
+    """
+    if request.method == "POST":
+        reservation = get_object_or_404(Reservation, pk=reservation_id)
+        try:
+            unassign_table_from_reservation(reservation)
+            messages.success(request, f"Table unassigned from reservation #{reservation.id} ({reservation.name}).")
+        except Exception as e:
+            messages.error(request, str(e))
+
+    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("restaurant:waiter_reservations")
+    return redirect(next_url)
+
+
+@waiter_required
+def waiter_seat_reservation(request, reservation_id):
+    """
+    Seats a customer party from their reservation:
+    Opens active TableSession, marks reservation ARRIVED, and marks table OCCUPIED.
+    """
+    if request.method == "POST":
+        reservation = get_object_or_404(Reservation, pk=reservation_id)
+        table_id = request.POST.get("table_id")
+        target_table = get_table_by_id(table_id) if table_id else reservation.table
+
+        if not target_table:
+            messages.error(request, "Please assign a table before seating guests.")
+            return redirect(request.META.get("HTTP_REFERER") or reverse("restaurant:waiter_reservations"))
+
+        try:
+            session = seat_reservation(reservation, table=target_table, waiter_user=request.user)
+            messages.success(
+                request,
+                f"Table {target_table.table_number} seated successfully for reservation #{reservation.id} ({session.guest_name})!"
+            )
+            return redirect("restaurant:waiter_table_detail", table_id=target_table.id)
+        except Exception as e:
+            messages.error(request, str(e))
+
+    return redirect(request.META.get("HTTP_REFERER") or reverse("restaurant:waiter_reservations"))
 
 
 @waiter_required
 def waiter_table_detail(request, table_id):
     """
     Detailed Table & Session view for Waiters.
-    Displays party details, placed orders, item preparation statuses, and bills.
+    Displays party details, placed orders, item preparation statuses, bills,
+    and assigned/available reservations for seating.
     """
     table = get_table_by_id(table_id)
     session = get_active_session_for_table(table.id)
     orders = session.orders.prefetch_related("items__menu_item").order_by("-created_at") if session else []
     bill = getattr(session, "bill", None) if session else None
     open_form = TableOpenForm()
+
+    today = timezone.localdate()
+    assigned_reservation = Reservation.objects.filter(
+        table=table,
+        date=today,
+        status__in=["CONFIRMED", "PENDING"],
+    ).first()
+
+    today_unseated_reservations = Reservation.objects.filter(
+        date=today,
+        status__in=["CONFIRMED", "PENDING"],
+    ).filter(Q(table__isnull=True) | Q(table=table)).order_by("time")
 
     return render(
         request,
@@ -913,6 +1360,8 @@ def waiter_table_detail(request, table_id):
             "orders": orders,
             "bill": bill,
             "open_form": open_form,
+            "assigned_reservation": assigned_reservation,
+            "today_unseated_reservations": today_unseated_reservations,
         },
     )
 
@@ -920,10 +1369,24 @@ def waiter_table_detail(request, table_id):
 @waiter_required
 def waiter_table_open(request, table_id):
     """
-    Opens a new session on an available or reserved table.
+    Opens a new session on an available or reserved table for walk-ins or reservations.
     """
     table = get_table_by_id(table_id)
     if request.method == "POST":
+        reservation_id = request.POST.get("reservation_id")
+        if reservation_id:
+            try:
+                reservation = get_object_or_404(Reservation, pk=reservation_id)
+                session = seat_reservation(reservation, table=table, waiter_user=request.user)
+                messages.success(
+                    request,
+                    f"Table {table.table_number} seated successfully for reservation #{reservation.id} ({session.guest_name})!"
+                )
+                return redirect("restaurant:waiter_table_detail", table_id=table.id)
+            except Exception as e:
+                messages.error(request, str(e))
+                return redirect("restaurant:waiter_table_detail", table_id=table.id)
+
         form = TableOpenForm(request.POST)
         if form.is_valid():
             guest_name = form.cleaned_data.get("guest_name", "")
@@ -1165,6 +1628,10 @@ def cashier_direct_bill(request):
                 msg = f"Direct bill #{bill.id} settled via {payment_method}! Total: ₹{bill.total}"
                 messages.success(request, msg)
                 redirect_target = reverse("restaurant:cashier_receipt", kwargs={"bill_id": bill.id})
+            elif request.POST.get("show_receipt") == "1" or request.GET.get("show_receipt") == "1":
+                msg = f"Direct bill #{bill.id} generated for {bill.display_customer}! Total: ₹{bill.total}"
+                messages.success(request, msg)
+                redirect_target = reverse("restaurant:cashier_receipt", kwargs={"bill_id": bill.id})
             else:
                 msg = f"Direct bill #{bill.id} generated for {bill.display_customer}! Total: ₹{bill.total}"
                 messages.success(request, msg)
@@ -1297,14 +1764,15 @@ def cashier_generate_bill(request, table_id):
 @cashier_required
 def cashier_receipt(request, bill_id):
     """
-    Printable luxury receipt view for paid bills.
+    Printable luxury receipt view for paid and unpaid bills.
+    Supports on-screen view, print invoice, and direct download.
     """
     bill = get_object_or_404(Bill.objects.select_related("session__table", "session__waiter", "cashier"), pk=bill_id)
     payments = bill.payments.all()
     session = bill.session
     orders = bill.all_orders
 
-    return render(
+    response = render(
         request,
         "restaurant/cashier/receipt.html",
         {
@@ -1314,32 +1782,129 @@ def cashier_receipt(request, bill_id):
             "payments": payments,
         },
     )
+    if request.GET.get("download") == "1":
+        response["Content-Disposition"] = f'attachment; filename="FoodWaves_Bill_{bill.id}.html"'
+    return response
 
 
 @cashier_required
+def cashier_download_bill(request, bill_id):
+    """
+    Direct invoice download endpoint: returns standalone HTML invoice as attachment.
+    """
+    bill = get_object_or_404(Bill.objects.select_related("session__table", "session__waiter", "cashier"), pk=bill_id)
+    payments = bill.payments.all()
+    session = bill.session
+    orders = bill.all_orders
+
+    response = render(
+        request,
+        "restaurant/cashier/receipt.html",
+        {
+            "bill": bill,
+            "session": session,
+            "orders": orders,
+            "payments": payments,
+            "is_download": True,
+        },
+    )
+    response["Content-Disposition"] = f'attachment; filename="FoodWaves_Invoice_Bill_{bill.id}.html"'
+    return response
+
+
+@cashier_or_manager_required
 def cashier_reports(request):
     """
-    Cashier daily sales report with revenue breakdown and payment journal.
+    Sales and financial settlement report accessible by Cashiers and Managers.
+    Supports preset periods ('today', 'yesterday', 'week', 'month') as well as
+    custom date ranges with validation constraints (start_date <= end_date, safe parsing).
     """
-    date_str = request.GET.get("date")
-    target_date = None
-    if date_str:
-        try:
-            target_date = timezone.datetime.strptime(date_str, "%Y-%m-%d").date()
-        except ValueError:
-            target_date = timezone.localdate()
-    else:
-        target_date = timezone.localdate()
+    today = timezone.localdate()
+    period = request.GET.get("period", "").strip().lower()
 
-    summary = get_daily_cashier_summary(target_date)
+    single_date_str = request.GET.get("date", "").strip()
+    start_date_str = request.GET.get("start_date", "").strip()
+    end_date_str = request.GET.get("end_date", "").strip()
+
+    date_error = None
+    start_date = None
+    end_date = None
+
+    # Handle backwards compatibility with single ?date=YYYY-MM-DD
+    if not period and single_date_str:
+        period = "custom"
+        start_date_str = single_date_str
+        end_date_str = single_date_str
+
+    if period == "custom" or (start_date_str or end_date_str):
+        period = "custom"
+        try:
+            if start_date_str:
+                start_date = timezone.datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            else:
+                start_date = today
+        except ValueError:
+            date_error = f"Invalid start date '{start_date_str}'. Expected format is YYYY-MM-DD."
+            start_date = today
+
+        try:
+            if end_date_str:
+                end_date = timezone.datetime.strptime(end_date_str, "%Y-%m-%d").date()
+            else:
+                end_date = start_date or today
+        except ValueError:
+            date_error = f"Invalid end date '{end_date_str}'. Expected format is YYYY-MM-DD."
+            end_date = start_date or today
+
+        # Date constraint enforcement: start_date cannot be greater than end_date
+        if start_date and end_date and start_date > end_date:
+            date_error = f"Date constraint: Start date ({start_date}) cannot be after End date ({end_date}). Dates have been adjusted."
+            start_date, end_date = end_date, start_date
+
+    if not period:
+        period = "today"
+
+    if date_error:
+        messages.warning(request, date_error)
+
+    summary = get_sales_report_summary(start_date=start_date, end_date=end_date, period=period)
+
+    # Determine caller context (Manager vs Cashier) for back button & breadcrumbs
+    is_manager = (
+        request.path.startswith("/manager/")
+        or (request.user.groups.filter(name="MANAGER").exists() and not request.user.groups.filter(name="CASHIER").exists())
+    )
+    if is_manager:
+        back_url = reverse("restaurant:manager_dashboard")
+        back_label = "← Back to Manager Dashboard"
+    else:
+        back_url = reverse("restaurant:cashier_dashboard")
+        back_label = "← Back to Cashier Dashboard"
+
     return render(
         request,
         "restaurant/cashier/reports.html",
         {
             "summary": summary,
-            "selected_date": target_date.strftime("%Y-%m-%d"),
+            "period": summary["period"],
+            "period_label": summary["period_label"],
+            "selected_date": summary["start_date"].strftime("%Y-%m-%d"),
+            "start_date": summary["start_date"].strftime("%Y-%m-%d"),
+            "end_date": summary["end_date"].strftime("%Y-%m-%d"),
+            "back_url": back_url,
+            "back_label": back_label,
+            "is_manager": is_manager,
+            "today_str": today.strftime("%Y-%m-%d"),
         },
     )
+
+
+@manager_required
+def manager_reports(request):
+    """
+    Manager endpoint for Sales & Financial Reports.
+    """
+    return cashier_reports(request)
 
 
 # ==============================================================================
@@ -1365,16 +1930,60 @@ def chef_kds(request):
 @chef_required
 def chef_item_status(request, item_id):
     """
-    Chef updates dish status from PREPARING to READY.
+    Chef updates dish status:
+    - PREPARING / Cooking
+    - READY / COMPLETED (Food cooked & ready for waiter to serve)
+    - NOT_AVAILABLE / CANCELLED (Cannot make dish; marks unavailable)
     """
     if request.method == "POST":
-        new_status = request.POST.get("status")
+        new_status = request.POST.get("status", "").strip().upper()
+        if new_status in ["COMPLETED", "READY"]:
+            new_status = "READY"
+        elif new_status in ["NOT_AVAILABLE", "UNAVAILABLE", "CANCELLED"]:
+            new_status = "CANCELLED"
+
+        reason = request.POST.get("reason", "").strip() or "Not available in kitchen"
+        mark_menu_unavailable = request.POST.get("mark_menu_unavailable", "true").lower() in ("true", "1", "yes")
+
         try:
-            item = update_order_item_status(item_id, new_status, updated_by=request.user)
-            messages.success(request, f"{item.menu_item.name} for Table {item.order.session.table.table_number} marked as {new_status}!")
+            item = OrderItem.objects.select_related("order__session__table", "order__bill", "menu_item").get(pk=item_id)
+            table_name = item.table_display
+
+            if new_status == "CANCELLED":
+                # Chef marks item as not available
+                update_order_item_status(item_id, "CANCELLED", updated_by=request.user)
+                if mark_menu_unavailable:
+                    update_menu_item_availability(
+                        item.menu_item,
+                        is_available=False,
+                        reason=f"Kitchen sold out during order for {table_name}",
+                        user=request.user,
+                    )
+                messages.warning(
+                    request,
+                    f"'{item.menu_item.name}' for {table_name} marked as NOT AVAILABLE. Menu item updated to sold out."
+                )
+            elif new_status == "READY":
+                update_order_item_status(item_id, "READY", updated_by=request.user)
+                messages.success(
+                    request,
+                    f"'{item.menu_item.name}' for {table_name} marked as COMPLETED (Ready for waiter to serve)!"
+                )
+            elif new_status == "PREPARING":
+                est = request.POST.get("estimated_minutes")
+                update_order_item_status(item_id, "PREPARING", updated_by=request.user, estimated_minutes=est)
+                messages.info(
+                    request,
+                    f"Started cooking '{item.menu_item.name}' for {table_name}."
+                )
+            else:
+                update_order_item_status(item_id, new_status, updated_by=request.user)
+                messages.success(request, f"{item.menu_item.name} for {table_name} updated to {new_status}.")
         except Exception as e:
             messages.error(request, str(e))
-    return redirect("restaurant:chef_kds")
+
+    next_url = request.POST.get("next") or request.META.get("HTTP_REFERER") or reverse("restaurant:chef_kds")
+    return redirect(next_url)
 
 
 # ==============================================================================

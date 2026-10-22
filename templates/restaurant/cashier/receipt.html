@@ -4,10 +4,11 @@
 {% block title %}Tax Invoice Receipt #{{ bill.id }} | Food Waves{% endblock %}
 
 {% block head %}
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     .receipt-shell {
       min-height: calc(100vh - 170px);
-      padding: 140px max(6vw, 24px) 90px;
+      padding: 130px max(5vw, 20px) 90px;
       background: 
         radial-gradient(circle at 10% 20%, rgba(52, 211, 153, 0.08), transparent 45%),
         linear-gradient(180deg, #030813 0%, #061124 50%, #08162b 100%);
@@ -15,22 +16,118 @@
     }
 
     .receipt-container {
-      max-width: 600px;
+      max-width: 680px;
       margin: auto;
+    }
+
+    .action-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .action-links {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .action-buttons {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .btn-receipt {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 16px;
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+      transition: all .2s ease;
+      border: 1px solid transparent;
+    }
+
+    .btn-receipt-print {
+      background: #34d399;
+      color: #030813;
+      border-color: #34d399;
+    }
+    .btn-receipt-print:hover {
+      background: #10b981;
+    }
+
+    .btn-receipt-pdf {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: #3b82f6;
+      color: #60a5fa;
+    }
+    .btn-receipt-pdf:hover {
+      background: #3b82f6;
+      color: #ffffff;
+    }
+
+    .btn-receipt-download {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+      color: #ffffff;
+    }
+    .btn-receipt-download:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .btn-receipt-settle {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #ffffff;
+      border-color: #34d399;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+    }
+    .btn-receipt-settle:hover {
+      box-shadow: 0 6px 18px rgba(16, 185, 129, 0.5);
+      transform: translateY(-1px);
+    }
+
+    .status-alert-box {
+      border-radius: var(--radius-md);
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .status-alert-box.unpaid {
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #fbbf24;
+    }
+    .status-alert-box.paid {
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #34d399;
     }
 
     .invoice-card {
       background: #ffffff;
       color: #0f172a;
       border-radius: var(--radius-lg);
-      padding: 40px 36px;
+      padding: 42px 38px;
       box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
       font-family: var(--sans);
     }
 
     .invoice-header {
       text-align: center;
-      padding-bottom: 24px;
+      padding-bottom: 22px;
       border-bottom: 2px dashed #cbd5e1;
       margin-bottom: 24px;
     }
@@ -46,7 +143,7 @@
     .invoice-meta-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 10px;
+      gap: 12px;
       font-size: 13px;
       color: #475569;
       margin-bottom: 20px;
@@ -62,7 +159,7 @@
     }
 
     .invoice-table th, .invoice-table td {
-      padding: 8px 4px;
+      padding: 9px 6px;
       text-align: left;
     }
 
@@ -70,6 +167,7 @@
       border-bottom: 1px solid #94a3b8;
       font-size: 11px;
       text-transform: uppercase;
+      letter-spacing: .05em;
       color: #64748b;
     }
 
@@ -108,18 +206,23 @@
 
     @media print {
       body * {
-        visibility: hidden;
+        visibility: hidden !important;
       }
-      .invoice-card, .invoice-card * {
-        visibility: visible;
+      .receipt-shell {
+        padding: 0 !important;
+        background: #ffffff !important;
       }
-      .invoice-card {
+      #printableInvoice, #printableInvoice * {
+        visibility: visible !important;
+      }
+      #printableInvoice {
         position: absolute;
         left: 0;
         top: 0;
         width: 100%;
-        box-shadow: none;
-        padding: 0;
+        box-shadow: none !important;
+        padding: 20px !important;
+        background: #ffffff !important;
       }
       .no-print {
         display: none !important;
@@ -132,17 +235,61 @@
 <div class="receipt-shell">
   <div class="receipt-container">
 
-    <div class="no-print" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-      <a href="{% url 'restaurant:cashier_dashboard' %}" style="color: var(--text-secondary); text-decoration: none; font-size: 13px;">
-        ← Back to Cashier Dashboard
-      </a>
-      <button onclick="window.print()" class="button" style="background: #34d399; color: #030813; font-weight: 700; border: none; padding: 10px 20px;">
-        🖨️ Print Tax Invoice
-      </button>
+    <!-- Top Action & Navigation Bar -->
+    <div class="action-bar no-print">
+      <div class="action-links">
+        <a href="{% url 'restaurant:cashier_dashboard' %}" style="color: var(--text-secondary); text-decoration: none; font-size: 13px;">
+          ← Cashier Dashboard
+        </a>
+        <a href="{% url 'restaurant:cashier_direct_bill' %}" style="color: #34d399; text-decoration: none; font-size: 13px; font-weight: 600;">
+          + New Counter Bill
+        </a>
+      </div>
+
+      <div class="action-buttons">
+        {% if bill.status != 'PAID' %}
+          <a href="{% url 'restaurant:cashier_settle_bill' bill.id %}" class="btn-receipt btn-receipt-settle">
+            💳 Settle & Collect Payment
+          </a>
+        {% endif %}
+        <button onclick="window.print()" type="button" class="btn-receipt btn-receipt-print" title="Print Tax Invoice">
+          🖨️ Print Bill
+        </button>
+        <button onclick="downloadBillPDF()" type="button" id="downloadPdfBtn" class="btn-receipt btn-receipt-pdf" title="Download PDF invoice">
+          📥 Download PDF
+        </button>
+        <a href="{% url 'restaurant:cashier_download_bill' bill.id %}" class="btn-receipt btn-receipt-download" title="Download HTML invoice file">
+          📄 Download File
+        </a>
+      </div>
     </div>
 
+    <!-- Notification Banner for Bill State -->
+    {% if bill.status != 'PAID' %}
+      <div class="status-alert-box unpaid no-print">
+        <div>
+          <b>⚠️ Bill Generated & Ready</b>
+          <div style="font-size: 12px; margin-top: 2px;">
+            This bill is currently <b>UNPAID (Pending Payment)</b>. You can print or download the bill now for the customer, and settle payment whenever ready.
+          </div>
+        </div>
+        <a href="{% url 'restaurant:cashier_settle_bill' bill.id %}" class="btn-receipt btn-receipt-settle" style="padding: 6px 12px; font-size: 12px;">
+          Pay Now →
+        </a>
+      </div>
+    {% else %}
+      <div class="status-alert-box paid no-print">
+        <div>
+          <b>✓ Bill Settled & Paid in Full</b>
+          <div style="font-size: 12px; margin-top: 2px;">
+            Transaction is finalized. You can print the customer tax invoice or download a digital copy.
+          </div>
+        </div>
+      </div>
+    {% endif %}
+
     <!-- Printable Receipt Card -->
-    <div class="invoice-card">
+    <div class="invoice-card" id="printableInvoice">
       <div class="invoice-header">
         <div style="font-size: 28px; line-height: 1;">≈</div>
         <div class="invoice-title">FOOD WAVES</div>
@@ -164,7 +311,16 @@
         <div style="text-align: right;">
           <b>Date:</b> {{ bill.created_at|date:"d M Y, h:i A" }}<br>
           <b>Cashier:</b> {{ bill.cashier.username|default:"Front Desk" }}<br>
-          <b>Status:</b> <span style="color: #16a34a; font-weight: 700;">{% if bill.status == 'PAID' %}PAID IN FULL{% else %}{{ bill.get_status_display|upper }}{% endif %}</span>
+          <b>Status:</b> 
+          {% if bill.status == 'PAID' %}
+            <span style="display: inline-block; background: #dcfce7; color: #15803d; font-weight: 700; padding: 2px 8px; border-radius: 4px; font-size: 12px;">
+              PAID IN FULL
+            </span>
+          {% else %}
+            <span style="display: inline-block; background: #fef3c7; color: #b45309; font-weight: 700; padding: 2px 8px; border-radius: 4px; font-size: 12px;">
+              UNPAID / DUE
+            </span>
+          {% endif %}
         </div>
       </div>
 
@@ -219,7 +375,7 @@
           </div>
         {% endif %}
         <div class="inv-row grand-total">
-          <span>Total Amount Paid:</span>
+          <span>{% if bill.status == 'PAID' %}Total Amount Paid:{% else %}Total Amount Due:{% endif %}</span>
           <span>₹{{ bill.total }}</span>
         </div>
       </div>
@@ -243,5 +399,40 @@
 
   </div>
 </div>
-{% endblock %}
 
+<script>
+  function downloadBillPDF() {
+    const btn = document.getElementById('downloadPdfBtn');
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ Generating PDF...';
+    btn.disabled = true;
+
+    const element = document.getElementById('printableInvoice');
+    const opt = {
+      margin:       [10, 10, 10, 10],
+      filename:     'FoodWaves_Invoice_Bill_{{ bill.id }}.pdf',
+      image:        { type: 'jpeg', quality: 0.98 },
+      html2canvas:  { scale: 2, useCORS: true },
+      jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+
+    if (typeof html2pdf !== 'undefined') {
+      html2pdf().set(opt).from(element).save().then(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+      }).catch(err => {
+        console.error("PDF generation error:", err);
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+        // Fallback to direct HTML invoice download
+        window.location.href = "{% url 'restaurant:cashier_download_bill' bill.id %}";
+      });
+    } else {
+      // Fallback
+      window.location.href = "{% url 'restaurant:cashier_download_bill' bill.id %}";
+      btn.innerHTML = originalText;
+      btn.disabled = false;
+    }
+  }
+</script>
+{% endblock %}

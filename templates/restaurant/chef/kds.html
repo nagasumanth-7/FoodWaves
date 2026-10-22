@@ -10,12 +10,13 @@
       padding: 140px max(6vw, 24px) 90px;
       background: 
         radial-gradient(circle at 10% 20%, rgba(20, 184, 166, 0.12), transparent 45%),
+        radial-gradient(circle at 80% 80%, rgba(96, 165, 250, 0.08), transparent 40%),
         linear-gradient(180deg, #030813 0%, #061124 50%, #08162b 100%);
       color: var(--text-primary);
     }
 
     .kds-container {
-      max-width: 1280px;
+      max-width: 1360px;
       margin: auto;
     }
 
@@ -32,12 +33,12 @@
 
     .kds-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
       gap: 24px;
     }
 
     .ticket-card {
-      background: rgba(9, 23, 44, 0.9);
+      background: rgba(9, 23, 44, 0.92);
       border: 1px solid var(--border-glass);
       border-radius: var(--radius-lg);
       padding: 24px;
@@ -47,6 +48,12 @@
       flex-direction: column;
       justify-content: space-between;
       border-top: 4px solid var(--cyan);
+      transition: transform .2s ease, border-color .2s ease;
+    }
+
+    .ticket-card:hover {
+      border-color: rgba(20, 184, 166, 0.4);
+      transform: translateY(-2px);
     }
 
     .ticket-top {
@@ -56,46 +63,188 @@
       margin-bottom: 16px;
       padding-bottom: 14px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      gap: 12px;
     }
 
     .ticket-title {
-      font-size: 22px;
+      font-size: 24px;
       font-weight: 800;
       color: #ffffff;
+      letter-spacing: -.02em;
     }
 
     .ticket-meta {
       font: 600 12px var(--mono);
       color: var(--text-secondary);
+      margin-top: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .source-pill {
+      font: 700 11px var(--mono);
+      padding: 3px 8px;
+      border-radius: 999px;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
+    .source-WAITER {
+      background: rgba(96, 165, 250, 0.15);
+      border: 1px solid rgba(96, 165, 250, 0.35);
+      color: #60a5fa;
+    }
+
+    .source-CUSTOMER {
+      background: rgba(243, 194, 113, 0.15);
+      border: 1px solid rgba(243, 194, 113, 0.35);
+      color: var(--gold-light);
+    }
+
+    .source-CASHIER {
+      background: rgba(52, 211, 153, 0.15);
+      border: 1px solid rgba(52, 211, 153, 0.35);
+      color: #34d399;
     }
 
     .ticket-item {
-      padding: 12px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 14px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 12px;
+      gap: 14px;
     }
 
     .ticket-item:last-child {
       border-bottom: none;
     }
 
-    .btn-ready {
-      background: #10b981;
-      color: #030813;
+    .item-info {
+      flex: 1;
+    }
+
+    .item-name {
+      color: #ffffff;
+      font-size: 15px;
+      font-weight: 700;
+      display: block;
+    }
+
+    .item-notes {
+      font-size: 12px;
+      color: #fbbf24;
+      margin-top: 2px;
+    }
+
+    .item-prep {
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-family: var(--mono);
+      margin-top: 3px;
+    }
+
+    .item-actions {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 6px;
+    }
+
+    .btn-action-group {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .btn-complete {
+      background: linear-gradient(135deg, #059669, #10b981);
+      color: #ffffff;
       border: none;
       padding: 6px 12px;
-      border-radius: 4px;
+      border-radius: var(--radius-sm);
       font-size: 12px;
       font-weight: 700;
       cursor: pointer;
-      transition: background .2s ease;
+      transition: all .2s;
+      white-space: nowrap;
     }
 
-    .btn-ready:hover {
+    .btn-complete:hover {
       background: #34d399;
+      color: #030813;
+    }
+
+    .btn-unavailable {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #f87171;
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all .2s;
+      white-space: nowrap;
+    }
+
+    .btn-unavailable:hover {
+      background: rgba(239, 68, 68, 0.25);
+      color: #ffffff;
+    }
+
+    .btn-cook {
+      background: rgba(6, 182, 212, 0.15);
+      border: 1px solid rgba(6, 182, 212, 0.35);
+      color: var(--cyan);
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all .2s;
+      white-space: nowrap;
+    }
+
+    .btn-cook:hover {
+      background: rgba(6, 182, 212, 0.25);
+      color: #ffffff;
+    }
+
+    .status-tag {
+      font: 700 11px var(--mono);
+      padding: 3px 8px;
+      border-radius: 4px;
+    }
+
+    .status-READY {
+      background: rgba(52, 211, 153, 0.15);
+      color: #34d399;
+    }
+
+    .status-PREPARING {
+      background: rgba(6, 182, 212, 0.15);
+      color: var(--cyan);
+    }
+
+    .status-CANCELLED {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+    }
+
+    .ticket-bottom {
+      margin-top: 18px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 12px;
+      color: var(--text-secondary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
     }
   </style>
 {% endblock %}
@@ -106,13 +255,18 @@
 
     <div class="kds-header">
       <div>
-        <span class="eyebrow" style="color: var(--cyan);">Live Kitchen Tickets</span>
+        <span class="eyebrow" style="color: var(--cyan);">Live Kitchen Tickets • Food Orders</span>
         <h1 style="font-size: 32px; font-weight: 800; color: #ffffff; margin: 4px 0;">Kitchen Display System (KDS)</h1>
-        <p style="color: var(--text-secondary); margin: 0;">Incoming waiter & table orders. Advance items when ready for collection.</p>
+        <p style="color: var(--text-secondary); margin: 0;">
+          Incoming food orders from Waiters and Customer QR scans. Displays item names, table numbers, and controls to mark food completed or not available.
+        </p>
       </div>
-      <div>
-        <a href="{% url 'restaurant:chef_menu_list' %}" class="button" style="background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.15); color: var(--text-secondary);">
-          Dish Availability Toggles →
+      <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
+        <a href="{% url 'restaurant:chef_dashboard' %}" class="button" style="background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.15); color: var(--text-secondary);">
+          ← Chef Dashboard
+        </a>
+        <a href="{% url 'restaurant:chef_menu_list' %}" class="button button-gold">
+          Menu Availability Board →
         </a>
       </div>
     </div>
@@ -122,44 +276,104 @@
       {% for order in orders %}
         <div class="ticket-card">
           <div>
+            <!-- Ticket Top: Table Number, Ticket #, Source -->
             <div class="ticket-top">
               <div>
-                <div class="ticket-title">Table {{ order.session.table.table_number }}</div>
-                <div class="ticket-meta">Ticket #{{ order.id }} • {{ order.created_at|date:"h:i A" }}</div>
+                <div class="ticket-title">{{ order.table_display }}</div>
+                <div class="ticket-meta">
+                  <span>Ticket #{{ order.id }}</span>
+                  <span>•</span>
+                  <span>⏰ {{ order.created_at|date:"h:i A" }}</span>
+                </div>
               </div>
-              <span class="status-badge" style="background: rgba(20, 184, 166, 0.15); color: var(--cyan); font-size: 11px;">
-                {{ order.get_status_display }}
-              </span>
+              <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+                <span class="source-pill source-{{ order.source }}">
+                  {% if order.source == "WAITER" %}
+                    👨‍🍳 Waiter Order
+                  {% elif order.source == "CUSTOMER" %}
+                    📱 Customer QR
+                  {% else %}
+                    {{ order.get_source_display }}
+                  {% endif %}
+                </span>
+                <span style="font: 600 11px var(--mono); color: var(--text-secondary);">
+                  {{ order.get_status_display }}
+                </span>
+              </div>
             </div>
 
             {% if order.special_instructions %}
               <div style="background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.25); border-radius: 4px; padding: 8px 12px; margin-bottom: 14px; font-size: 12px; color: #fbbf24;">
-                ⚠️ <b>Kitchen Note:</b> {{ order.special_instructions }}
+                ⚠️ <b>Order Note:</b> {{ order.special_instructions }}
               </div>
             {% endif %}
 
+            <!-- Ticket Items List -->
             <div class="ticket-items-list">
               {% for item in order.items.all %}
                 <div class="ticket-item">
-                  <div>
-                    <b style="color: #ffffff; font-size: 15px;">{{ item.quantity }}x {{ item.menu_item.name }}</b>
+                  <div class="item-info">
+                    <span class="item-name">
+                      {{ item.quantity }}x {{ item.menu_item.name }}
+                    </span>
                     {% if item.special_instructions %}
-                      <div style="font-size: 12px; color: #fbbf24;">Note: {{ item.special_instructions }}</div>
+                      <div class="item-notes">Note: {{ item.special_instructions }}</div>
                     {% endif %}
-                    <div style="font-size: 11px; color: var(--text-secondary);">Prep ~{{ item.menu_item.preparation_time }}m</div>
+                    <div class="item-prep">
+                      {% if item.status == 'PREPARING' %}
+                        <span style="color: var(--cyan); font-weight: 700;">🔥 Cooking</span>
+                        {% if item.estimated_minutes %}(~{{ item.estimated_minutes }}m){% endif %}
+                      {% elif item.status == 'PENDING' %}
+                        <span style="color: var(--text-secondary);">Prep ~{{ item.menu_item.preparation_time }}m</span>
+                      {% elif item.status == 'READY' %}
+                        <span style="color: #34d399; font-weight: 700;">✓ Completed (Ready)</span>
+                      {% elif item.status == 'SERVED' %}
+                        <span style="color: var(--text-secondary);">✓ Served</span>
+                      {% elif item.status == 'CANCELLED' %}
+                        <span style="color: #f87171; font-weight: 700;">✕ Not Available</span>
+                      {% endif %}
+                    </div>
                   </div>
 
-                  <div>
-                    {% if item.status == 'PREPARING' %}
-                      <form method="POST" action="{% url 'restaurant:chef_item_status' item.id %}" style="margin: 0;">
-                        {% csrf_token %}
-                        <input type="hidden" name="status" value="READY" />
-                        <button type="submit" class="btn-ready">Mark Ready 🛎️</button>
-                      </form>
+                  <!-- Chef Action Buttons for this item -->
+                  <div class="item-actions">
+                    {% if item.status in 'PENDING,PREPARING' %}
+                      <div class="btn-action-group">
+                        {% if item.status == 'PENDING' %}
+                          <form method="POST" action="{% url 'restaurant:chef_item_status' item.id %}" style="margin: 0;">
+                            {% csrf_token %}
+                            <input type="hidden" name="status" value="PREPARING" />
+                            <button type="submit" class="btn-cook" title="Start cooking this dish">
+                              🔥 Cook
+                            </button>
+                          </form>
+                        {% endif %}
+
+                        <!-- Mark Completed (Ready) -->
+                        <form method="POST" action="{% url 'restaurant:chef_item_status' item.id %}" style="margin: 0;">
+                          {% csrf_token %}
+                          <input type="hidden" name="status" value="COMPLETED" />
+                          <button type="submit" class="btn-complete" title="Mark food as completed and ready to serve">
+                            ✓ Completed
+                          </button>
+                        </form>
+
+                        <!-- Mark Not Available -->
+                        <form method="POST" action="{% url 'restaurant:chef_item_status' item.id %}" style="margin: 0;" onsubmit="return confirm('Mark \'{{ item.menu_item.name }}\' as NOT AVAILABLE for {{ order.table_display }}?\n\nThis will mark the dish as sold out on the menu so no more orders can be placed.');">
+                          {% csrf_token %}
+                          <input type="hidden" name="status" value="NOT_AVAILABLE" />
+                          <button type="submit" class="btn-unavailable" title="Cannot make dish (out of stock/unavailable)">
+                            ✕ Not Available
+                          </button>
+                        </form>
+                      </div>
+
                     {% elif item.status == 'READY' %}
-                      <span style="color: #34d399; font-size: 12px; font-weight: 700;">Ready for Waiter</span>
+                      <span class="status-tag status-READY">Completed 🛎️</span>
                     {% elif item.status == 'SERVED' %}
                       <span style="color: var(--text-secondary); font-size: 12px;">Served ✓</span>
+                    {% elif item.status == 'CANCELLED' %}
+                      <span class="status-tag status-CANCELLED">Not Available ✕</span>
                     {% endif %}
                   </div>
                 </div>
@@ -167,16 +381,27 @@
             </div>
           </div>
 
-          <div style="margin-top: 18px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.05); font-size: 12px; color: var(--text-secondary); display: flex; justify-content: space-between;">
-            <span>Waiter: {{ order.placed_by.username|default:"Floor Staff" }}</span>
-            <span>Guest: {{ order.session.guest_name }}</span>
+          <!-- Ticket Bottom: Order Placed By / Guest Name -->
+          <div class="ticket-bottom">
+            <span>
+              {% if order.source == "WAITER" %}
+                Ordered by Waiter: <b>{{ order.placed_by.get_full_name|default:order.placed_by.username }}</b>
+              {% elif order.source == "CUSTOMER" %}
+                Customer QR: <b>{{ order.session.guest_name|default:"Table Guest" }}</b>
+              {% else %}
+                By: <b>{{ order.placed_by.username|default:"Staff" }}</b>
+              {% endif %}
+            </span>
+            {% if order.session and order.session.guest_name %}
+              <span>Guest: <b>{{ order.session.guest_name }}</b></span>
+            {% endif %}
           </div>
         </div>
       {% empty %}
         <div style="grid-column: 1 / -1; text-align: center; padding: 60px 24px; background: rgba(9,23,44,0.6); border-radius: var(--radius-lg);">
           <span style="font-size: 36px; display: block; margin-bottom: 12px;">👨‍🍳</span>
           <h3 style="color: #ffffff; margin: 0 0 8px;">Kitchen Queue is Clear!</h3>
-          <p style="color: var(--text-secondary); font-size: 15px;">All placed orders have been prepared and served.</p>
+          <p style="color: var(--text-secondary); font-size: 15px;">No active orders waiting in the kitchen right now.</p>
         </div>
       {% endfor %}
     </div>
@@ -184,4 +409,3 @@
   </div>
 </div>
 {% endblock %}
-
