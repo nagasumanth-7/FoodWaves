@@ -562,240 +562,124 @@
       margin: 0;
     }
 
-    /* Chef's Signature Tasting & Specials */
-    .specials-section {
-      padding: 120px max(7vw, 36px);
-      background: 
-        radial-gradient(circle at 80% 20%, rgba(243, 194, 113, 0.08), transparent 45%),
-        radial-gradient(circle at 15% 85%, rgba(6, 182, 212, 0.12), transparent 45%),
-        linear-gradient(180deg, #030813 0%, #061124 50%, #08162b 100%);
+    /* Operations Section */
+    .operations-section {
+      padding: 110px max(7vw, 36px);
+      background: linear-gradient(180deg, #030813 0%, #061427 100%);
       position: relative;
     }
 
-    .specials-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 32px;
+    .ops-panel {
       margin-top: 50px;
-    }
-
-    .special-card {
-      border-radius: var(--radius-xl);
+      display: grid;
+      grid-template-columns: repeat(3, 1fr) 1.8fr;
       border: 1px solid var(--border-glass);
-      background: rgba(9, 23, 44, 0.72);
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+      background: rgba(8, 22, 44, 0.7);
       backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      overflow: hidden;
+      box-shadow: var(--shadow-3d);
+    }
+
+    .metric-box {
+      padding: 32px 28px;
+      border-right: 1px solid var(--border-glass);
       display: flex;
       flex-direction: column;
-      transition: transform 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease;
-      box-shadow: var(--shadow-card);
-    }
-
-    .special-card:hover {
-      transform: translateY(-8px);
-      border-color: rgba(243, 194, 113, 0.45);
-      box-shadow: 0 25px 50px rgba(0, 0, 0, 0.55), 0 0 30px rgba(243, 194, 113, 0.12);
-    }
-
-    .special-img-wrap {
-      position: relative;
-      height: 220px;
-      overflow: hidden;
-    }
-
-    .special-img-wrap img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      transition: transform 0.7s ease;
-    }
-
-    .special-card:hover .special-img-wrap img {
-      transform: scale(1.08);
-    }
-
-    .special-tag {
-      position: absolute;
-      top: 14px;
-      left: 14px;
-      background: rgba(3, 8, 19, 0.85);
-      border: 1px solid rgba(243, 194, 113, 0.4);
-      color: var(--gold-light);
-      font: 700 10px var(--mono);
-      letter-spacing: 0.1em;
-      padding: 5px 12px;
-      border-radius: 20px;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-    }
-
-    .special-price {
-      position: absolute;
-      bottom: 14px;
-      right: 14px;
-      background: rgba(3, 8, 19, 0.9);
-      border: 1px solid rgba(91, 214, 255, 0.35);
-      color: #ffffff;
-      font: 800 15px var(--sans);
-      padding: 6px 14px;
-      border-radius: 20px;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-    }
-
-    .special-body {
-      padding: 26px;
-      display: flex;
-      flex-direction: column;
-      flex-grow: 1;
       justify-content: space-between;
     }
 
-    .special-body h3 {
-      font-size: 20px;
+    .metric-box small {
+      font: 600 10px var(--mono);
+      letter-spacing: 0.12em;
+      color: #8daac6;
+      text-transform: uppercase;
+    }
+
+    .metric-box b {
+      font-size: 42px;
       color: #ffffff;
-      margin: 0 0 10px;
-      letter-spacing: -0.02em;
+      margin: 16px 0 10px;
+      letter-spacing: -0.03em;
     }
 
-    .special-body p {
-      color: var(--text-muted);
-      font-size: 13px;
-      line-height: 1.6;
-      margin: 0 0 20px;
+    .metric-box span {
+      font-size: 12px;
+      color: #7effde;
     }
 
-    .special-meta {
+    .orders-feed {
+      padding: 26px 30px;
       display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .feed-header {
+      display: flex;
+      justify-content: space-between;
       align-items: center;
-      justify-content: space-between;
-      border-top: 1px solid rgba(121, 202, 255, 0.1);
-      padding-top: 16px;
-      font: 600 11px var(--mono);
-      color: var(--cyan);
-    }
-
-    /* Guest Stories / Testimonials */
-    .testimonials-section {
-      padding: 100px max(7vw, 36px);
-      background: linear-gradient(180deg, #08162b 0%, #030813 100%);
-      position: relative;
-    }
-
-    .testimonial-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 28px;
-      margin-top: 50px;
-    }
-
-    .testimonial-card {
-      border-radius: var(--radius-xl);
-      border: 1px solid var(--border-glass);
-      background: rgba(7, 18, 36, 0.75);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      padding: 34px 30px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      box-shadow: var(--shadow-card);
-      transition: transform 0.35s ease, border-color 0.35s ease;
-    }
-
-    .testimonial-card:hover {
-      transform: translateY(-6px);
-      border-color: rgba(91, 214, 255, 0.35);
-    }
-
-    .stars {
-      color: var(--gold);
-      font-size: 16px;
-      letter-spacing: 3px;
       margin-bottom: 16px;
-    }
-
-    .quote-text {
-      color: #d1e2f6;
       font-size: 14px;
-      line-height: 1.7;
-      font-style: italic;
-      margin: 0 0 24px;
+      font-weight: 700;
+      color: #ffffff;
     }
 
-    .guest-profile {
-      display: flex;
+    .feed-header small {
+      font: 600 10px var(--mono);
+      color: var(--blue);
+      letter-spacing: 0.1em;
+    }
+
+    .order-row {
+      display: grid;
+      grid-template-columns: 32px 1fr 80px 70px;
       align-items: center;
-      gap: 14px;
+      padding: 12px 0;
       border-top: 1px solid rgba(121, 202, 255, 0.1);
-      padding-top: 18px;
     }
 
-    .guest-avatar {
-      width: 44px;
-      height: 44px;
-      border-radius: 50%;
-      border: 2px solid var(--gold);
-      object-fit: cover;
+    .order-row i {
+      color: #6d96b9;
+      font: 600 11px var(--mono);
+      font-style: normal;
     }
 
-    .guest-info b {
+    .order-row span b {
       display: block;
       color: #ffffff;
-      font-size: 13px;
+      font-size: 12px;
     }
 
-    .guest-info small {
-      color: var(--cyan);
-      font: 600 11px var(--mono);
-      letter-spacing: 0.05em;
-    }
-
-    /* Dining Pass Styling */
-    .pass-footer {
-      margin-top: 14px;
-      padding-top: 14px;
-      border-top: 1px solid rgba(121, 202, 255, 0.15);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .pass-info {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .pass-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #34d399;
-      box-shadow: 0 0 8px #34d399;
-    }
-
-    .pass-info small {
-      font: 600 11px var(--mono);
+    .order-row span small {
       color: var(--text-muted);
-      letter-spacing: 0.06em;
+      font-size: 10px;
     }
 
-    .pass-cta {
-      color: var(--gold-light);
-      font: 700 12px var(--sans);
-      text-decoration: none;
-      transition: color 0.2s, transform 0.2s;
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
+    .order-row em {
+      padding: 5px 9px;
+      border-radius: 6px;
+      background: rgba(59, 255, 227, 0.15);
+      color: #81ffe9;
+      font: 600 10px var(--mono);
+      font-style: normal;
+      text-align: center;
     }
 
-    .pass-cta:hover {
+    .order-row em.cooking {
+      background: rgba(88, 169, 255, 0.18);
+      color: #8acaff;
+    }
+
+    .order-row em.served {
+      background: rgba(255, 255, 255, 0.08);
+      color: #a8b8ce;
+    }
+
+    .order-row strong {
+      font-size: 12px;
+      text-align: right;
       color: #ffffff;
-      transform: translateX(3px);
     }
 
     /* Closing CTA Card */
@@ -844,8 +728,12 @@
       .capability-grid {
         grid-template-columns: 1fr 1fr;
       }
-      .specials-grid {
+      .ops-panel {
         grid-template-columns: 1fr 1fr;
+      }
+      .orders-feed {
+        grid-column: span 2;
+        border-top: 1px solid var(--border-glass);
       }
     }
 
@@ -862,11 +750,11 @@
       .capability-grid {
         grid-template-columns: 1fr;
       }
-      .specials-grid {
+      .ops-panel {
         grid-template-columns: 1fr;
       }
-      .testimonial-grid {
-        grid-template-columns: 1fr;
+      .orders-feed {
+        grid-column: span 1;
       }
       .closing-card {
         padding: 44px 24px;
@@ -923,48 +811,46 @@
       <div class="scene" id="scene">
         <!-- Floating 3D Chips -->
         <div class="status-chip chip-orders">
-          <i style="background: #f3c271; box-shadow: 0 0 10px #f3c271;"></i>
-          <span>CHEF'S SIGNATURE</span>
-          <b>ROYAL GONGURA BIRYANI</b>
+          <i></i>
+          <span>LIVE ORDER</span>
+          <b>#00482 · TABLE 07</b>
         </div>
 
         <div class="status-chip chip-table">
-          <i style="background: #34d399; box-shadow: 0 0 10px #34d399;"></i>
-          <span>GUEST RATING</span>
-          <b>4.9 ★ (15K+ DINERS)</b>
+          <i></i>
+          <span>RESERVATIONS</span>
+          <b>18 / 24 TABLES</b>
         </div>
 
         <!-- 3D Central Glass Card -->
         <div class="dashboard-card card-3d">
           <div class="dash-top">
-            <span class="live-dot" style="background: var(--gold); box-shadow: 0 0 10px var(--gold);"></span>
-            <small style="color: var(--gold-light); font-weight: 700; letter-spacing: 0.14em;">EXCLUSIVE DINING PASS</small>
+            <span class="live-dot"></span>
+            <small>RESTAURANT LIVE PULSE</small>
           </div>
 
           <div class="dash-greeting">
-            <span>Namaskaram, {{ user.first_name|default:user.username|default:"Esteemed Guest" }}</span>
-            <strong>An Ocean of Telugu Flavors</strong>
+            <span>Good evening, {{ user.first_name|default:user.username|default:"Connoisseur" }}</span>
+            <strong>Food Waves Kitchen</strong>
           </div>
 
           <div class="dash-stats">
             <div>
-              <small>Tonight's Pairing</small>
-              <b style="font-size: 15px; color: var(--gold-light);">Andhra Spices &amp; Sula Wine</b>
-              <em style="color: var(--cyan);">✨ Sommelier Selection</em>
+              <small>Today's Service</small>
+              <b>₹58,420</b>
+              <em>↑ 18% vs avg</em>
             </div>
             <div>
-              <small>Atmosphere</small>
-              <b style="font-size: 15px; color: #ffffff;">Candlelight Suites</b>
-              <em style="color: #8afff2;">Live Soothing Melodies</em>
+              <small>Table Turnover</small>
+              <b>42 min</b>
+              <em>⚡ Ultra smooth</em>
             </div>
           </div>
 
-          <div class="pass-footer">
-            <div class="pass-info">
-              <span class="pass-dot"></span>
-              <small>Tables Available Tonight</small>
-            </div>
-            <a href="{% url 'restaurant:reservation' %}" class="pass-cta">Reserve Table →</a>
+          <div class="chart">
+            <svg viewBox="0 0 310 78" preserveAspectRatio="none">
+              <path d="M0 65 Q45 15, 90 45 T180 20 T270 50 T310 10" />
+            </svg>
           </div>
         </div>
 
@@ -1047,193 +933,69 @@
     </div>
   </section>
 
-  <!-- Chef's Signature Tasting & Specials -->
-  <section class="specials-section" id="specials">
+  <!-- Real-Time Operations & Service Flow Section -->
+  <section class="operations-section" id="orders">
     <div class="section-head">
-      <p class="eyebrow">ARTISANAL CULINARY CRAFT <span>• CHEF'S SIGNATURES</span></p>
-      <h2>Flavors Sculpted With Passion,<br>Served With <span>Telugu Grace.</span></h2>
+      <p class="eyebrow">RESTAURANT OS <span>• PRECISION SERVICE</span></p>
+      <h2>Service in <span>Perfect Harmony.</span></h2>
       <p>
-        From coastal seafood delicacies pan-seared over glowing embers to royal slow-cooked Nizami dum biryanis, each recipe honors generational Andhra traditions.
+        Behind the serene dining room is a synchronized operational engine ensuring zero wait times and hot-to-table delivery.
       </p>
     </div>
 
-    <div class="specials-grid">
-      <!-- Special 1 -->
-      <div class="special-card card-3d">
-        <div class="special-img-wrap">
-          <img src="https://images.unsplash.com/photo-1565557623262-b51c2513a641?auto=format&fit=crop&w=700&q=80" alt="Konaseema Royyala Vepudu" loading="lazy">
-          <span class="special-tag">COASTAL CLASSIC</span>
-          <span class="special-price">₹440</span>
-        </div>
-        <div class="special-body">
-          <div>
-            <h3>Konaseema Royyala Vepudu</h3>
-            <p>Fresh wild tiger prawns tossed with cold-pressed sesame oil, caramelized shallots, fiery black pepper, and fragrant fresh curry leaves.</p>
-          </div>
-          <div class="special-meta">
-            <span>🔥 Medium Coastal Spice</span>
-            <span>⏱ 15 min prep</span>
-          </div>
-        </div>
+    <div class="ops-panel card-3d">
+      <div class="metric-box">
+        <small>TODAY'S ORDERS</small>
+        <b data-count="342">0</b>
+        <span>+14% higher than last week</span>
       </div>
 
-      <!-- Special 2 -->
-      <div class="special-card card-3d">
-        <div class="special-img-wrap">
-          <img src="https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?auto=format&fit=crop&w=700&q=80" alt="Avakaya Gongura Kodi Biryani" loading="lazy">
-          <span class="special-tag">CHEF'S SIGNATURE</span>
-          <span class="special-price">₹380</span>
-        </div>
-        <div class="special-body">
-          <div>
-            <h3>Avakaya Gongura Kodi Biryani</h3>
-            <p>Aromatic long-grain basmati layered with tender country chicken, tangy tart red sorrel leaves, and seasoned with vintage Guntur mango pickle.</p>
-          </div>
-          <div class="special-meta">
-            <span>🌶 Tangy &amp; Bold</span>
-            <span>⏱ Slow Dum Cooked</span>
-          </div>
-        </div>
+      <div class="metric-box">
+        <small>FLOOR CAPACITY</small>
+        <b>18 <span style="font-size: 20px; color: var(--text-muted);">/ 24</span></b>
+        <span>75% optimal seating</span>
       </div>
 
-      <!-- Special 3 -->
-      <div class="special-card card-3d">
-        <div class="special-img-wrap">
-          <img src="https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=700&q=80" alt="Guntur Mirchi Paneer Tikka" loading="lazy">
-          <span class="special-tag">TANDOOR STARTER</span>
-          <span class="special-price">₹290</span>
-        </div>
-        <div class="special-body">
-          <div>
-            <h3>Guntur Mirchi Paneer Tikka</h3>
-            <p>Creamy organic paneer cubes steeped in smoked hung yogurt marinade, crushed roasted coriander seeds, and mild sun-dried Guntur chilies.</p>
-          </div>
-          <div class="special-meta">
-            <span>🌿 Vegetarian Delight</span>
-            <span>⏱ Clay Tandoor Charred</span>
-          </div>
-        </div>
+      <div class="metric-box">
+        <small>AVERAGE PREPARATION</small>
+        <b>14 <span style="font-size: 20px; color: var(--text-muted);">min</span></b>
+        <span>Kitchen operating at peak sync</span>
       </div>
 
-      <!-- Special 4 -->
-      <div class="special-card card-3d">
-        <div class="special-img-wrap">
-          <img src="https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=700&q=80" alt="Pesarattu & Allam Pachadi" loading="lazy">
-          <span class="special-tag">HERITAGE TIFFIN</span>
-          <span class="special-price">₹160</span>
+      <div class="orders-feed">
+        <div class="feed-header">
+          <span>Live Service Ticket Feed</span>
+          <small>REAL-TIME PASS</small>
         </div>
-        <div class="special-body">
-          <div>
-            <h3>Pesarattu &amp; Allam Pachadi Royale</h3>
-            <p>Crispy whole green-gram crepe stuffed with buttery spiced upma, served with sweet-tangy artisanal ginger chutney and fresh coconut chutney.</p>
-          </div>
-          <div class="special-meta">
-            <span>🌾 High Protein Healthy</span>
-            <span>⏱ Plated Fresh</span>
-          </div>
-        </div>
-      </div>
 
-      <!-- Special 5 -->
-      <div class="special-card card-3d">
-        <div class="special-img-wrap">
-          <img src="https://images.unsplash.com/photo-1626777552726-4a6b54c97e46?auto=format&fit=crop&w=700&q=80" alt="Nellore Chepala Pulusu" loading="lazy">
-          <span class="special-tag">CLAY POT SPECIALTY</span>
-          <span class="special-price">₹460</span>
+        <div class="order-row">
+          <i>01</i>
+          <span>
+            <b>Gongura Kodi Curry · Table 04</b>
+            <small>Chef Vikram S. · Pass dispatched</small>
+          </span>
+          <em>Ready</em>
+          <strong>₹480</strong>
         </div>
-        <div class="special-body">
-          <div>
-            <h3>Nellore Chepala Pulusu</h3>
-            <p>Catch of the day simmered gently in heritage clay pots with aged tamarind pulp, roasted fenugreek, green chilies, and tender raw mango slices.</p>
-          </div>
-          <div class="special-meta">
-            <span>🐟 Fresh Daily Catch</span>
-            <span>⏱ Traditional Earthen Clay</span>
-          </div>
+
+        <div class="order-row">
+          <i>02</i>
+          <span>
+            <b>Pesarattu &amp; Allam Chutney · Table 11</b>
+            <small>Tiffin Station · Plating now</small>
+          </span>
+          <em class="cooking">Plating</em>
+          <strong>₹240</strong>
         </div>
-      </div>
 
-      <!-- Special 6 -->
-      <div class="special-card card-3d">
-        <div class="special-img-wrap">
-          <img src="https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?auto=format&fit=crop&w=700&q=80" alt="Filter Kaapi Tiramisu" loading="lazy">
-          <span class="special-tag">SIGNATURE DESSERT</span>
-          <span class="special-price">₹220</span>
-        </div>
-        <div class="special-body">
-          <div>
-            <h3>Filter Kaapi Tiramisu</h3>
-            <p>South Indian brass-filter decoction soaked ladyfingers layered with airy mascarpone cream, finished with roasted cocoa dust and cocoa nibs.</p>
-          </div>
-          <div class="special-meta">
-            <span>☕ Chikmagalur Blend</span>
-            <span>⏱ Chilled Perfection</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div style="text-align: center; margin-top: 48px;">
-      <a class="button button-gold" href="{% url 'restaurant:menu' %}" style="display: inline-flex; align-items: center; gap: 12px; padding: 14px 32px;">
-        <span>Explore Complete Dining Menu</span>
-        <b>→</b>
-      </a>
-    </div>
-  </section>
-
-  <!-- Guest Stories & Celebrations -->
-  <section class="testimonials-section" id="reviews">
-    <div class="section-head">
-      <p class="eyebrow">HEARTFELT EXPERIENCES <span>• GUEST VOICES</span></p>
-      <h2>Celebrated by <span>Over 15,000+ Guests.</span></h2>
-      <p>
-        Read why food lovers, families, and culinary connoisseurs choose Food Waves for their most treasured gatherings.
-      </p>
-    </div>
-
-    <div class="testimonial-grid">
-      <!-- Testimonial 1 -->
-      <div class="testimonial-card card-3d">
-        <div class="stars">★★★★★</div>
-        <p class="quote-text">
-          "The Avakaya Biryani and Royyala Vepudu took me straight back to my childhood memories in coastal Andhra. The coastal luxury ambiance and attentive service made our anniversary celebration truly magical."
-        </p>
-        <div class="guest-profile">
-          <img class="guest-avatar" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80" alt="Radhika & Sumanth">
-          <div class="guest-info">
-            <b>Radhika &amp; Sumanth V.</b>
-            <small>Anniversary Celebration · Verified Diner</small>
-          </div>
-        </div>
-      </div>
-
-      <!-- Testimonial 2 -->
-      <div class="testimonial-card card-3d">
-        <div class="stars">★★★★★</div>
-        <p class="quote-text">
-          "We booked a private dining booth for our executive board dinner. The sommelier wine pairings paired with bold Andhra spices were extraordinary. Unquestionably the premier fine dining restaurant in the city."
-        </p>
-        <div class="guest-profile">
-          <img class="guest-avatar" src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&q=80" alt="Dr. Vikram Prasad">
-          <div class="guest-info">
-            <b>Dr. Vikram Prasad</b>
-            <small>Private Suite Booking · Connoisseur</small>
-          </div>
-        </div>
-      </div>
-
-      <!-- Testimonial 3 -->
-      <div class="testimonial-card card-3d">
-        <div class="stars">★★★★★</div>
-        <p class="quote-text">
-          "Booking online was seamless, and the moment we arrived our table was ready with warm personalized greetings. The Nellore Fish Curry and Filter Kaapi Tiramisu are legendary. A 10/10 culinary experience."
-        </p>
-        <div class="guest-profile">
-          <img class="guest-avatar" src="https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=150&q=80" alt="Sneha & Friends">
-          <div class="guest-info">
-            <b>Sneha Reddy &amp; Friends</b>
-            <small>Weekend Gathering · Regular Guest</small>
-          </div>
+        <div class="order-row">
+          <i>03</i>
+          <span>
+            <b>Paneer Butter Masala · Table 09</b>
+            <small>Curry Station · Served hot</small>
+          </span>
+          <em class="served">Served</em>
+          <strong>₹360</strong>
         </div>
       </div>
     </div>
