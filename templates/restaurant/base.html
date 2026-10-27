@@ -13,6 +13,592 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@1,400;1,600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{% static 'restaurant/css/styles.css' %}">
 
+    <!-- Critical Luxury Base Styles (Guarantees zero FOUC and pristine styling across mobile & desktop) -->
+    <style id="critical-base-css">
+      :root {
+        --bg-deep: #030813;
+        --bg-dark: #061124;
+        --bg-surface: #0a1b33;
+        --bg-card: rgba(11, 27, 51, 0.75);
+        --bg-glass: rgba(8, 21, 40, 0.65);
+        --border-glass: rgba(121, 202, 255, 0.14);
+        --border-glass-bright: rgba(138, 255, 242, 0.28);
+        --border-glow: rgba(91, 214, 255, 0.4);
+        --blue: #5bd6ff;
+        --cyan: #8afff2;
+        --teal: #14b8a6;
+        --gold: #f3c271;
+        --gold-light: #ffd89b;
+        --text-bright: #ffffff;
+        --text-primary: #eff7ff;
+        --text-muted: #9cb5ce;
+        --text-dim: #6784a3;
+        --mono: "DM Mono", monospace;
+        --sans: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        --serif: "Playfair Display", Georgia, serif;
+      }
+
+      *, *::before, *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html {
+        scroll-behavior: smooth;
+        color-scheme: dark;
+      }
+
+      body {
+        margin: 0;
+        background-color: #030813;
+        background-image: 
+          radial-gradient(circle at 15% 15%, rgba(91, 214, 255, 0.08), transparent 40%),
+          radial-gradient(circle at 85% 65%, rgba(20, 184, 166, 0.07), transparent 45%),
+          radial-gradient(circle at 50% 90%, rgba(243, 194, 113, 0.05), transparent 40%);
+        background-attachment: fixed;
+        color: #eff7ff;
+        font-family: var(--sans);
+        overflow-x: hidden;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      a {
+        text-decoration: none;
+        color: inherit;
+      }
+
+      /* Buttons & CTA Pills */
+      .button, .btn-primary {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        padding: 13px 24px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #4ad3ff 0%, #7dffef 100%);
+        color: #021424 !important;
+        text-decoration: none !important;
+        font-size: 14px;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+        border: 0;
+        cursor: pointer;
+        box-shadow: 0 0 35px rgba(74, 211, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.2s ease;
+      }
+
+      .button:hover, .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 40px rgba(74, 211, 255, 0.5);
+      }
+
+      .button-gold {
+        background: linear-gradient(135deg, #e2b168 0%, #ffd89b 100%);
+        color: #1a0f02 !important;
+        box-shadow: 0 0 35px rgba(226, 177, 104, 0.35);
+      }
+
+      .button-gold:hover {
+        box-shadow: 0 10px 40px rgba(226, 177, 104, 0.55);
+      }
+
+      .button-outline {
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px solid rgba(121, 202, 255, 0.24);
+        color: #eff7ff !important;
+        box-shadow: none;
+      }
+
+      .button-outline:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: #5bd6ff;
+        color: #ffffff !important;
+        box-shadow: 0 0 24px rgba(91, 214, 255, 0.2);
+      }
+
+      .button-small {
+        padding: 9px 16px;
+        font-size: 12px;
+        border-radius: 8px;
+      }
+
+      /* Sticky Luxury Header */
+      .site-header {
+        position: fixed;
+        top: 14px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        width: min(1280px, calc(100% - 28px));
+        height: 64px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 20px 0 24px;
+        border: 1px solid rgba(121, 202, 255, 0.16);
+        border-radius: 16px;
+        background: rgba(4, 13, 27, 0.72);
+        backdrop-filter: blur(18px);
+        -webkit-backdrop-filter: blur(18px);
+        box-shadow: 0 10px 35px rgba(0, 0, 0, 0.45);
+        transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+
+      .site-header.scrolled {
+        top: 8px;
+        background: rgba(4, 13, 27, 0.92);
+        border-color: rgba(91, 214, 255, 0.32);
+        box-shadow: 0 16px 45px rgba(0, 0, 0, 0.6), 0 0 30px rgba(91, 214, 255, 0.14);
+      }
+
+      .logo {
+        display: inline-flex;
+        align-items: center;
+        color: #ffffff;
+        text-decoration: none;
+        font-size: 15px;
+        font-weight: 800;
+        letter-spacing: 1.8px;
+      }
+
+      .logo b {
+        color: #5bd6ff;
+        background: linear-gradient(120deg, #5bd6ff, #8afff2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-left: 2px;
+      }
+
+      .logo-mark {
+        font-size: 24px;
+        line-height: 0;
+        color: #8afff2;
+        vertical-align: -2px;
+        margin-right: 8px;
+        text-shadow: 0 0 16px rgba(138, 255, 242, 0.7);
+        display: inline-block;
+      }
+
+      .site-header nav {
+        display: flex;
+        align-items: center;
+        gap: 28px;
+      }
+
+      .site-header nav a {
+        position: relative;
+        color: #9cb5ce;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 600;
+        transition: color 0.2s;
+        padding: 6px 0;
+      }
+
+      .site-header nav a:hover,
+      .site-header nav a.active {
+        color: #ffffff;
+      }
+
+      .site-header nav a::after {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 0;
+        height: 2px;
+        background: linear-gradient(90deg, #5bd6ff, #8afff2);
+        border-radius: 2px;
+        transition: width 0.25s ease;
+      }
+
+      .site-header nav a:hover::after,
+      .site-header nav a.active::after {
+        width: 100%;
+      }
+
+      .nav-actions {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+      }
+
+      .nav-actions .login {
+        color: #9cb5ce;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 8px 14px;
+        border-radius: 8px;
+        transition: color 0.2s, background 0.2s;
+      }
+
+      .nav-actions .login:hover {
+        color: #ffffff;
+        background: rgba(255, 255, 255, 0.05);
+      }
+
+      .user-greeting {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 4px 12px 4px 4px;
+        border-radius: 30px;
+        background: rgba(13, 35, 66, 0.7);
+        border: 1px solid rgba(91, 214, 255, 0.2);
+        color: #9cb5ce;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .user-avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #1d7a90 0%, #5bd6ff 100%);
+        color: #031426;
+        display: grid;
+        place-items: center;
+        font-size: 11px;
+        font-weight: 800;
+      }
+
+      .user-greeting b {
+        color: #ffffff;
+      }
+
+      .btn-nav-logout {
+        color: #f87272;
+        font-size: 12px;
+        font-weight: 600;
+        text-decoration: none;
+        padding: 6px 12px;
+        border-radius: 6px;
+        border: 1px solid rgba(248, 114, 114, 0.25);
+        background: rgba(248, 114, 114, 0.06);
+        transition: all 0.2s ease;
+      }
+
+      .btn-nav-logout:hover {
+        background: rgba(248, 114, 114, 0.16);
+        border-color: #f87272;
+        color: #ff9999 !important;
+      }
+
+      .mobile-toggle {
+        display: none;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(121, 202, 255, 0.25);
+        color: #8afff2;
+        cursor: pointer;
+        padding: 8px 12px;
+        font-size: 18px;
+        border-radius: 10px;
+        line-height: 1;
+        transition: all 0.2s ease;
+      }
+
+      .mobile-toggle:hover {
+        background: rgba(91, 214, 255, 0.15);
+        border-color: #5bd6ff;
+        color: #ffffff;
+        box-shadow: 0 0 15px rgba(91, 214, 255, 0.35);
+      }
+
+      /* Mobile Drawer (Strictly concealed off-screen by default) */
+      .drawer-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(1, 4, 10, 0.78);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        z-index: 99998;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.3s ease;
+      }
+
+      .drawer-overlay.active {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .mobile-drawer {
+        position: fixed !important;
+        top: 0 !important;
+        right: -100% !important;
+        width: min(340px, 86vw) !important;
+        height: 100vh !important;
+        background: rgba(4, 12, 26, 0.98) !important;
+        backdrop-filter: blur(28px) !important;
+        -webkit-backdrop-filter: blur(28px) !important;
+        border-left: 1px solid rgba(121, 202, 255, 0.2) !important;
+        z-index: 99999 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        padding: 24px 20px !important;
+        box-shadow: -20px 0 60px rgba(0, 0, 0, 0.85) !important;
+        transition: right 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) !important;
+        visibility: hidden;
+      }
+
+      .mobile-drawer.open {
+        right: 0 !important;
+        visibility: visible !important;
+      }
+
+      .drawer-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 24px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid rgba(121, 202, 255, 0.12);
+      }
+
+      .drawer-close {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        color: #ffffff;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        font-size: 20px;
+        cursor: pointer;
+        line-height: 1;
+        transition: all 0.2s ease;
+      }
+
+      .drawer-close:hover {
+        background: rgba(248, 114, 114, 0.2);
+        border-color: #f87272;
+        color: #ff9999;
+      }
+
+      .drawer-nav {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        overflow-y: auto;
+        max-height: calc(100vh - 110px);
+        padding-right: 4px;
+      }
+
+      .drawer-nav a {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 13px 16px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid rgba(121, 202, 255, 0.08);
+        color: #eff7ff;
+        font-size: 14px;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.2s ease;
+      }
+
+      .drawer-nav a span {
+        color: #5bd6ff;
+        font-size: 15px;
+        transition: transform 0.2s ease;
+      }
+
+      .drawer-nav a:hover {
+        background: rgba(91, 214, 255, 0.12);
+        border-color: rgba(91, 214, 255, 0.35);
+        color: #ffffff;
+        transform: translateX(3px);
+      }
+
+      .drawer-nav a:hover span {
+        transform: translateX(4px);
+      }
+
+      /* Luxury Multi-Column Footer */
+      .site-footer {
+        position: relative;
+        background: linear-gradient(180deg, #030813 0%, #050f20 100%);
+        border-top: 1px solid rgba(121, 202, 255, 0.15);
+        padding: 80px max(7vw, 24px) 36px;
+        margin-top: 80px;
+        color: #9cb5ce;
+        font-size: 13px;
+      }
+
+      .footer-top-accent {
+        position: absolute;
+        top: 0;
+        left: 8%;
+        right: 8%;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(91, 214, 255, 0.6), rgba(243, 194, 113, 0.6), transparent);
+      }
+
+      .footer-grid {
+        display: grid;
+        grid-template-columns: 1.8fr 1fr 1.2fr 1.3fr;
+        gap: 48px;
+        margin-bottom: 50px;
+      }
+
+      .footer-col h4 {
+        font-size: 11px;
+        font-weight: 800;
+        color: #ffffff;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        margin: 0 0 20px;
+        font-family: var(--mono);
+      }
+
+      .footer-col p {
+        color: #9cb5ce;
+        line-height: 1.7;
+        margin: 0 0 16px;
+      }
+
+      .footer-col ul {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 11px;
+      }
+
+      .footer-col a {
+        color: #9cb5ce;
+        text-decoration: none;
+        transition: all 0.2s ease;
+        font-size: 13px;
+      }
+
+      .footer-col a:hover {
+        color: #8afff2;
+        transform: translateX(2px);
+      }
+
+      .footer-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 14px;
+        background: rgba(243, 194, 113, 0.1);
+        border: 1px solid rgba(243, 194, 113, 0.3);
+        border-radius: 20px;
+        color: #ffd89b;
+        font: 700 11px var(--mono);
+        letter-spacing: 0.08em;
+        margin: 14px 0 10px;
+      }
+
+      .footer-live-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font: 600 11px var(--mono);
+        color: #8afff2;
+      }
+
+      .pulse-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #34d399;
+        box-shadow: 0 0 10px #34d399;
+      }
+
+      .footer-bottom {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-top: 1px solid rgba(255, 255, 255, 0.06);
+        padding-top: 28px;
+        font-size: 12px;
+        color: #6784a3;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+
+      /* Global Responsive Rules */
+      @media (max-width: 960px) {
+        .site-header nav {
+          display: none !important;
+        }
+        .mobile-toggle {
+          display: inline-flex !important;
+        }
+        .site-header {
+          width: calc(100% - 24px);
+          height: 58px;
+          padding: 0 14px 0 18px;
+        }
+        .footer-grid {
+          grid-template-columns: 1fr 1fr;
+          gap: 36px;
+        }
+      }
+
+      @media (max-width: 600px) {
+        .footer-grid {
+          grid-template-columns: 1fr;
+          gap: 30px;
+        }
+        .footer-bottom {
+          flex-direction: column;
+          text-align: center;
+          gap: 10px;
+        }
+        .user-greeting span {
+          display: none;
+        }
+      }
+
+      /* Global Flash Messages / Toasts */
+      .flash-messages {
+        position: fixed;
+        top: 84px;
+        right: 20px;
+        z-index: 9999;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-width: 380px;
+      }
+
+      .alert {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 18px;
+        border-radius: 12px;
+        font-size: 13px;
+        font-weight: 600;
+        background: rgba(9, 24, 48, 0.94);
+        border: 1px solid rgba(91, 214, 255, 0.3);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        color: #eff7ff;
+      }
+
+      .alert-success { border-color: rgba(52, 211, 153, 0.4); color: #34d399; }
+      .alert-error, .alert-danger { border-color: rgba(248, 114, 114, 0.4); color: #f87272; }
+      .alert-close {
+        background: none;
+        border: none;
+        color: inherit;
+        font-size: 18px;
+        cursor: pointer;
+        opacity: 0.7;
+      }
+      .alert-close:hover { opacity: 1; }
+    </style>
+
     {% block head %}{% endblock %}
   </head>
 
@@ -40,7 +626,7 @@
 
       <nav aria-label="Primary navigation">
         <a href="{% url 'restaurant:home' %}#home">Home</a>
-        <a href="{% url 'restaurant:home' %}#features">Experience</a>
+        <a href="{% url 'restaurant:home' %}#ambience">Experience</a>
         <a href="{% url 'restaurant:menu' %}">Menu</a>
         <a href="{% url 'restaurant:reservation' %}">Book Table</a>
         {% if user.is_authenticated %}
@@ -86,19 +672,19 @@
       </div>
     </header>
 
-    <!-- Mobile Navigation Drawer -->
+    <!-- Mobile Navigation Drawer (Hidden off-screen) -->
     <div class="drawer-overlay" id="drawerOverlay"></div>
     <aside class="mobile-drawer" id="mobileDrawer">
-      <button class="drawer-close" id="drawerClose">&times;</button>
-      <div style="margin-bottom: 24px;">
+      <div class="drawer-top">
         <a class="logo" href="{% url 'restaurant:home' %}">
           <span class="logo-mark">≈</span>
           FOOD <b>WAVES</b>
         </a>
+        <button class="drawer-close" id="drawerClose" aria-label="Close menu">&times;</button>
       </div>
       <nav class="drawer-nav">
         <a href="{% url 'restaurant:home' %}#home">Home <span>→</span></a>
-        <a href="{% url 'restaurant:home' %}#features">Experience <span>→</span></a>
+        <a href="{% url 'restaurant:home' %}#ambience">Experience <span>→</span></a>
         <a href="{% url 'restaurant:menu' %}">Curated Menu <span>→</span></a>
         <a href="{% url 'restaurant:reservation' %}">Book a Table <span>→</span></a>
         {% if user.is_authenticated %}
@@ -126,7 +712,7 @@
           <a href="{% url 'restaurant:logout' %}" style="color: #f87272;">Log out <span>→</span></a>
         {% else %}
           <a href="{% url 'restaurant:login' %}">Log in <span>→</span></a>
-          <a href="{% url 'restaurant:signup' %}" style="color: var(--cyan);">Create Account <span>→</span></a>
+          <a href="{% url 'restaurant:signup' %}" style="color: var(--cyan); font-weight: 700;">Create Account <span>→</span></a>
         {% endif %}
       </nav>
     </aside>
@@ -137,51 +723,64 @@
 
     <!-- Luxury Multi-Column Footer -->
     <footer class="site-footer">
+      <div class="footer-top-accent"></div>
       <div class="footer-grid">
         <div class="footer-col">
-          <a class="logo" href="{% url 'restaurant:home' %}" style="margin-bottom: 16px; display: inline-flex;">
+          <a class="logo" href="{% url 'restaurant:home' %}" style="margin-bottom: 18px; display: inline-flex;">
             <span class="logo-mark">≈</span>
             FOOD <b>WAVES</b>
           </a>
           <p>
-            An immersive dining experience marrying authentic Andhra heritage with coastal nuance and modern hospitality design.
+            An immersive culinary sanctum blending authentic coastal Andhra heritage with modern gastronomy and Michelin-grade hospitality.
           </p>
-          <p style="color: var(--gold-light); font-size: 12px; font-family: var(--mono);">
-            ★ MICHELIN GUIDE RECOMMENDED AMBIENCE
-          </p>
+          <div class="footer-badge">
+            <span>★</span>
+            <span>MICHELIN GUIDE RECOMMENDED AMBIENCE</span>
+          </div>
+          <div class="footer-live-status">
+            <span class="pulse-dot"></span>
+            <span>DINING ROOM &amp; BAR OPEN TONIGHT</span>
+          </div>
         </div>
 
         <div class="footer-col">
-          <h4>EXPLORE</h4>
+          <h4>EXPERIENCE</h4>
           <ul>
-            <li><a href="{% url 'restaurant:home' %}">Overview</a></li>
-            <li><a href="{% url 'restaurant:menu' %}">Today's Menu</a></li>
-            <li><a href="{% url 'restaurant:reservation' %}">Reserve Table</a></li>
-            <li><a href="{% url 'restaurant:home' %}#about">The Kitchen</a></li>
+            <li><a href="{% url 'restaurant:home' %}#home">Grand Welcome</a></li>
+            <li><a href="{% url 'restaurant:home' %}#ambience">Coastal Ambience</a></li>
+            <li><a href="{% url 'restaurant:menu' %}">Curated Tasting Menu</a></li>
+            <li><a href="{% url 'restaurant:reservation' %}">Reserve Your Table</a></li>
+            <li><a href="{% url 'restaurant:home' %}#reviews">Guest Acclaim</a></li>
           </ul>
         </div>
 
         <div class="footer-col">
-          <h4>HOURS</h4>
+          <h4>HOURS &amp; SERVICE</h4>
           <ul>
-            <li style="color: var(--text-muted); font-size: 13px;"><b>Lunch:</b> 12:00 PM – 3:30 PM</li>
-            <li style="color: var(--text-muted); font-size: 13px;"><b>Dinner:</b> 6:30 PM – 11:30 PM</li>
-            <li style="color: var(--text-muted); font-size: 13px;"><b>Bar:</b> Until 12:30 AM</li>
-            <li style="color: var(--cyan); font-size: 12px; margin-top: 6px;">Open 7 Days a Week</li>
+            <li style="color: var(--text-muted); font-size: 13px;"><b>Lunch Service:</b> 12:00 PM – 3:30 PM</li>
+            <li style="color: var(--text-muted); font-size: 13px;"><b>Dinner Tasting:</b> 6:30 PM – 11:30 PM</li>
+            <li style="color: var(--text-muted); font-size: 13px;"><b>Cocktail Lounge:</b> Until 12:30 AM</li>
+            <li style="color: var(--cyan); font-size: 12px; margin-top: 6px; font-weight: 600;">Open 7 Days a Week</li>
           </ul>
         </div>
 
         <div class="footer-col">
-          <h4>RESERVATIONS</h4>
-          <p style="margin-bottom: 8px;">Direct host concierge:</p>
-          <a href="tel:+918012345678" style="color: var(--blue); font-weight: 700; font-family: var(--mono); font-size: 14px;">+91 80 1234 5678</a>
-          <p style="margin-top: 12px; font-size: 12px;">Lavelle Road, Central Hospitality District, Bengaluru</p>
+          <h4>CONCIERGE &amp; RESERVATIONS</h4>
+          <p style="margin-bottom: 8px;">Direct host desk &amp; private dining:</p>
+          <a href="tel:+918012345678" style="color: var(--blue); font-weight: 700; font-family: var(--mono); font-size: 15px; display: inline-block; margin-bottom: 8px;">+91 80 1234 5678</a>
+          <p style="font-size: 12px; line-height: 1.6; margin-bottom: 16px;">
+            Lavelle Road, Central Hospitality District<br>
+            Bengaluru, Karnataka 560001
+          </p>
+          <a class="button button-gold button-small" href="{% url 'restaurant:reservation' %}" style="width: 100%; text-align: center; justify-content: center;">
+            <span>Instant Reservation</span> <b>→</b>
+          </a>
         </div>
       </div>
 
       <div class="footer-bottom">
         <span>&copy; 2026 Food Waves Hospitality Group. All rights reserved.</span>
-        <span>Crafted for luxury rhythm &amp; culinary excellence.</span>
+        <span>Crafted with rhythm, precision &amp; coastal elegance.</span>
       </div>
     </footer>
 

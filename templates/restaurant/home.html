@@ -970,14 +970,39 @@
     }
 
     @media (max-width: 640px) {
+      .hero {
+        padding: 110px 18px 60px;
+        min-height: auto;
+      }
       .hero h1 {
-        font-size: 40px;
+        font-size: 36px;
+        line-height: 1.1;
+      }
+      .hero-lede {
+        font-size: 14px;
+        margin: 18px 0 24px;
+      }
+      .hero-actions {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+      }
+      .hero-actions .button {
+        width: 100%;
+        justify-content: center;
+      }
+      .trust-strip {
+        margin-top: 28px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
       }
       .scene {
-        transform: translate(-50%, -50%) scale(0.72);
+        transform: translate(-50%, -50%) scale(0.58);
       }
       .scene-wrap {
-        height: 440px;
+        height: 360px;
+        margin-top: 10px;
       }
       .capability-grid {
         grid-template-columns: 1fr;
@@ -989,7 +1014,7 @@
         grid-template-columns: 1fr;
       }
       .closing-card {
-        padding: 44px 24px;
+        padding: 36px 20px;
       }
     }
   </style>
