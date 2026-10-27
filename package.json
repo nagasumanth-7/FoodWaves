@@ -1,4 +1,10 @@
 {
+  "name": "food-waves",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "bash build_files.sh",
+    "vercel-build": "bash build_files.sh"
+  },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.117.1"

@@ -10,7 +10,6 @@ node_modules/
 .DS_Store
 __MACOSX/
 media/
-staticfiles/
 build/
 dist/
 *.egg-info/

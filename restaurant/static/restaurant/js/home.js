@@ -89,8 +89,8 @@
     });
   });
 
-  // Ambience and Capability cards reveal
-  gsap.utils.toArray('.ambience-hero-card, .ambience-side-card, .capability-card, .ops-panel, .closing-card').forEach((el, i) => {
+  // Ambience and Feature cards reveal
+  gsap.utils.toArray('.ambience-hero-card, .ambience-side-card, .capability-card, .special-card, .testimonial-card, .closing-card').forEach((el, i) => {
     gsap.from(el, {
       y: 30,
       opacity: 0,
