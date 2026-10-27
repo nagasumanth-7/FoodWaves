@@ -106,14 +106,16 @@ else:
     db_url = os.getenv("DATABASE_URL")
     if db_url:
         parsed = urllib.parse.urlparse(db_url)
+        db_name = parsed.path.lstrip("/").split("?")[0]
         DATABASES = {
             "default": {
                 "ENGINE": "django.db.backends.postgresql",
-                "NAME": parsed.path.lstrip("/"),
-                "USER": urllib.parse.unquote(parsed.username or ""),
-                "PASSWORD": urllib.parse.unquote(parsed.password or ""),
-                "HOST": parsed.hostname or "localhost",
+                "NAME": db_name or "postgres",
+                "USER": urllib.parse.unquote(parsed.username or "postgres.smurbxgwcwsnzirrpqgh"),
+                "PASSWORD": urllib.parse.unquote(parsed.password or "Sumanth@999"),
+                "HOST": parsed.hostname or "aws-0-ap-south-1.pooler.supabase.com",
                 "PORT": str(parsed.port or 5432),
+                "CONN_MAX_AGE": 0,
             }
         }
     else:
@@ -121,16 +123,18 @@ else:
             "default": {
                 "ENGINE": "django.db.backends.postgresql",
                 "NAME": os.getenv("DB_NAME", "postgres"),
-                "USER": os.getenv("DB_USER", "postgres"),
-                "PASSWORD": os.getenv("DB_PASSWORD", ""),
-                "HOST": os.getenv("DB_HOST", "localhost"),
+                "USER": os.getenv("DB_USER", "postgres.smurbxgwcwsnzirrpqgh"),
+                "PASSWORD": os.getenv("DB_PASSWORD", "Sumanth@999"),
+                "HOST": os.getenv("DB_HOST", "aws-0-ap-south-1.pooler.supabase.com"),
                 "PORT": os.getenv("DB_PORT", "5432"),
+                "CONN_MAX_AGE": 0,
             }
         }
 
     if DATABASES["default"]["ENGINE"] == "django.db.backends.postgresql":
         DATABASES["default"]["OPTIONS"] = {
             "sslmode": os.getenv("DB_SSLMODE", "require"),
+            "connect_timeout": 10,
         }
 
 AUTH_PASSWORD_VALIDATORS = []
@@ -168,5 +172,8 @@ LOGIN_URL = "restaurant:login"
 LOGIN_REDIRECT_URL = "restaurant:reservation"
 LOGOUT_REDIRECT_URL = "restaurant:home"
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "").rstrip("/")
-SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY", "").strip()
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://smurbxgwcwsnzirrpqgh.supabase.co").rstrip("/")
+SUPABASE_ANON_KEY = os.getenv(
+    "SUPABASE_ANON_KEY",
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNtdXJieGd3Y3dzbnppcnJwcWdoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxNjg1NTQsImV4cCI6MjEwNTc0NDU1NH0.WwvPZjEiWpTgxjLAyoATBlMiQ-_sJSIrNYV936uG2nk",
+).strip()

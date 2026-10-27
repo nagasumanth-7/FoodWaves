@@ -1,7 +1,10 @@
 import io
 import json
+import logging
 import qrcode
 from decimal import Decimal
+
+logger = logging.getLogger(__name__)
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout, get_user_model
 from django.contrib.auth.decorators import login_required
@@ -122,21 +125,28 @@ def menu(request):
     category_slug = request.GET.get("category", "").strip().lower()
     search_query = request.GET.get("q", "").strip()
 
-    categories = get_active_categories()
-    items_qs = get_active_menu_items(search_query=search_query)
+    try:
+        categories = list(get_active_categories())
+        items_qs = get_active_menu_items(search_query=search_query)
 
-    # Optional server-side category slug filtering
-    selected_category = None
-    if category_slug and category_slug != "all":
-        for cat in categories:
-            if cat.slug_identifier == category_slug or cat.name.lower() == category_slug:
-                items_qs = items_qs.filter(category=cat)
-                selected_category = cat
-                break
+        # Optional server-side category slug filtering
+        selected_category = None
+        if category_slug and category_slug != "all":
+            for cat in categories:
+                if cat.slug_identifier == category_slug or cat.name.lower() == category_slug:
+                    items_qs = items_qs.filter(category=cat)
+                    selected_category = cat
+                    break
 
-    items_list = list(items_qs)
+        items_list = list(items_qs)
+    except Exception as db_err:
+        logger.error(f"Error loading menu from database: {db_err}")
+        categories = []
+        items_list = []
+        selected_category = None
+
     total_count = len(items_list)
-    available_count = sum(1 for item in items_list if item.is_available)
+    available_count = sum(1 for item in items_list if getattr(item, "is_available", False))
 
     # If requested via AJAX or JSON
     if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.GET.get("format") == "json":
@@ -675,11 +685,16 @@ def login_page(request):
             password = form.cleaned_data["password"]
             remember_me = form.cleaned_data.get("remember_me", True)
 
-            # Direct authentication for Staff, Managers, Chefs, Waiters, Cashiers, and Superusers
-            local_user = (
-                User.objects.filter(email__iexact=email).first()
-                or User.objects.filter(username__iexact=email).first()
-            )
+            try:
+                # Direct authentication for Staff, Managers, Chefs, Waiters, Cashiers, and Superusers
+                local_user = (
+                    User.objects.filter(email__iexact=email).first()
+                    or User.objects.filter(username__iexact=email).first()
+                )
+            except Exception as db_err:
+                logger.error(f"Database error during staff lookup: {db_err}")
+                local_user = None
+
             if (
                 local_user
                 and local_user.is_active
@@ -724,21 +739,26 @@ def login_page(request):
             name = user_meta.get("name") or ""
             phone = user_meta.get("phone_number") or ""
 
-            django_user, created = User.objects.get_or_create(
-                username=email,
-                defaults={"email": email, "first_name": name, "is_active": True},
-            )
-            django_user.is_active = True
-            if name and not django_user.first_name:
-                django_user.first_name = name
-            django_user.set_password(password)
-            django_user.save()
+            try:
+                django_user, created = User.objects.get_or_create(
+                    username=email,
+                    defaults={"email": email, "first_name": name, "is_active": True},
+                )
+                django_user.is_active = True
+                if name and not django_user.first_name:
+                    django_user.first_name = name
+                django_user.set_password(password)
+                django_user.save()
 
-            profile, _ = UserProfile.objects.get_or_create(user=django_user)
-            profile.is_email_verified = True
-            if phone and not profile.phone_number:
-                profile.phone_number = phone
-            profile.save()
+                profile, _ = UserProfile.objects.get_or_create(user=django_user)
+                profile.is_email_verified = True
+                if phone and not profile.phone_number:
+                    profile.phone_number = phone
+                profile.save()
+            except Exception as db_err:
+                logger.error(f"Error persisting user to database: {db_err}")
+                messages.error(request, "Unable to synchronize user session with database. Please try again.")
+                return render(request, "restaurant/login.html", {"form": form, "next": next_url})
 
             login(request, django_user, backend="django.contrib.auth.backends.ModelBackend")
             request.session["supabase_token"] = data_or_code.get("access_token")
