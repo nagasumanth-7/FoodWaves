@@ -295,80 +295,12 @@
       color: var(--text-dim);
     }
 
-    .order-qr-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
-      border-radius: 20px;
-      background: rgba(91, 214, 255, 0.08);
-      border: 1px solid rgba(91, 214, 255, 0.22);
-      color: var(--cyan);
-      font: 600 11px var(--mono);
-      letter-spacing: .03em;
-      white-space: nowrap;
-      transition: all 0.25s ease;
-    }
-
-    .order-qr-pill:hover {
-      background: rgba(91, 214, 255, 0.16);
-      border-color: rgba(91, 214, 255, 0.4);
-      box-shadow: 0 0 12px rgba(91, 214, 255, 0.25);
-    }
-
+    
     .sold-out-badge {
       font-size: 11px;
       color: var(--text-dim);
       font-family: var(--mono);
       font-weight: 600;
-    }
-
-    .qr-info-card {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-      margin: 28px 0 34px;
-      padding: 16px 22px;
-      border-radius: var(--radius-md);
-      background: rgba(9, 23, 44, 0.75);
-      border: 1px solid rgba(121, 202, 255, 0.22);
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-    }
-
-    .qr-info-icon {
-      font-size: 24px;
-      line-height: 1;
-      display: grid;
-      place-items: center;
-      width: 44px;
-      height: 44px;
-      border-radius: 12px;
-      background: rgba(91, 214, 255, 0.12);
-      border: 1px solid rgba(91, 214, 255, 0.25);
-      color: var(--cyan);
-      flex-shrink: 0;
-    }
-
-    .qr-info-text {
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-    }
-
-    .qr-info-text b {
-      color: #ffffff;
-      font-size: 14px;
-      font-weight: 700;
-      letter-spacing: -0.01em;
-    }
-
-    .qr-info-text p {
-      color: var(--text-muted);
-      font-size: 13px;
-      line-height: 1.5;
-      margin: 0;
     }
 
     .note-box {
@@ -487,18 +419,9 @@
                     <span>🔴</span>
                     <span>Currently Unavailable</span>
                   </div>
-                  {% if item.availability_reason %}
-                    <small style="display:block; color:var(--text-dim); margin-top:4px; font-size:10px;">{{ item.availability_reason }}</small>
-                  {% endif %}
+
                 {% endif %}
               </div>
-
-              <div>
-                {% if item.is_available %}
-                  
-                {% else %}
-                  <span class="sold-out-badge">Kitchen Sold Out</span>
-                {% endif %}
               </div>
             </div>
           </article>
