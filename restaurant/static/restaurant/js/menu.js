@@ -5,8 +5,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const itemsContainer = document.querySelector("#items");
   const searchInput = document.querySelector("#search");
   const filtersContainer = document.querySelector("#filters");
-  const cartToast = document.querySelector("#cartToast");
-  const toastMsg = document.querySelector("#toastMsg");
 
   if (!itemsContainer) return;
 
@@ -62,31 +60,4 @@ document.addEventListener("DOMContentLoaded", () => {
       filterItems();
     });
   }
-
-  // Toast notification for Add to Cart
-  window.handleAddToCart = function (itemId, itemName, itemPrice) {
-    // Save to local cart session
-    let cart = [];
-    try {
-      cart = JSON.parse(sessionStorage.getItem("fw_cart") || "[]");
-    } catch (e) {
-      cart = [];
-    }
-
-    const existing = cart.find((i) => i.item_id === itemId);
-    if (existing) {
-      existing.quantity += 1;
-    } else {
-      cart.push({ item_id: itemId, name: itemName, price: itemPrice, quantity: 1 });
-    }
-    sessionStorage.setItem("fw_cart", JSON.stringify(cart));
-
-    if (cartToast && toastMsg) {
-      toastMsg.textContent = `Added "${itemName}" (₹${itemPrice}) to your dining selection.`;
-      cartToast.style.display = "flex";
-      setTimeout(() => {
-        cartToast.style.display = "none";
-      }, 3500);
-    }
-  };
 });
