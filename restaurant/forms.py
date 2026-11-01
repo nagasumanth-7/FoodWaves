@@ -350,7 +350,7 @@ class PaymentProcessForm(forms.Form):
         min_value=0,
         max_value=100,
         decimal_places=2,
-        widget=forms.NumberInput(attrs={"class": "form-control", "placeholder": "0%", "step": "0.5"}),
+        widget=forms.HiddenInput(),
     )
     tip_amount = forms.DecimalField(
         required=False,

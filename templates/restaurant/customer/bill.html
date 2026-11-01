@@ -263,12 +263,6 @@
             <span>Subtotal</span>
             <span>₹{{ bill.subtotal }}</span>
           </div>
-          {% if bill.discount > 0 %}
-            <div class="total-row" style="color: #34d399;">
-              <span>Discount</span>
-              <span>-₹{{ bill.discount }}</span>
-            </div>
-          {% endif %}
           <div class="total-row">
             <span>5% Restaurant GST (2.5% CGST + 2.5% SGST)</span>
             <span>₹{{ bill.tax }}</span>

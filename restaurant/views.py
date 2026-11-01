@@ -1700,26 +1700,23 @@ def cashier_settle_bill(request, bill_id):
         if form.is_valid():
             method = form.cleaned_data["payment_method"]
             amount_paid = form.cleaned_data["amount_paid"]
-            discount_pct = form.cleaned_data.get("discount_pct") or Decimal("0.00")
             tip_amount = form.cleaned_data.get("tip_amount") or Decimal("0.00")
             tx_id = form.cleaned_data.get("transaction_id", "")
 
             if session:
-                # Re-generate table bill if discount or tip adjusted
+                # Re-generate table bill if tip adjusted (discounts removed)
                 bill = calculate_and_generate_bill(
                     session=session,
                     cashier=request.user,
-                    discount_pct=discount_pct,
                     tip_amount=tip_amount,
                 )
             else:
-                # Direct counter bill: update discount/tip/tax/total on bill
+                # Direct counter bill: update tip/tax/total on bill (discounts removed)
                 subtotal = bill.subtotal
-                discount_amount = (subtotal * (discount_pct / Decimal("100.00"))).quantize(Decimal("0.01"))
-                taxable_amount = max(Decimal("0.00"), subtotal - discount_amount)
+                taxable_amount = subtotal
                 tax_amount = (taxable_amount * GST_RATE).quantize(Decimal("0.01"))
                 total_amount = (taxable_amount + tax_amount + tip_amount).quantize(Decimal("0.01"))
-                bill.discount = discount_amount
+                bill.discount = Decimal("0.00")
                 bill.tax = tax_amount
                 bill.tip = tip_amount
                 bill.total = total_amount
@@ -1746,7 +1743,6 @@ def cashier_settle_bill(request, bill_id):
     else:
         form = PaymentProcessForm(initial={
             "amount_paid": bill.total,
-            "discount_pct": bill.discount,
             "tip_amount": bill.tip,
         })
 

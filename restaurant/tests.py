@@ -1221,14 +1221,13 @@ class CustomerQROrderingAndSystemCompletenessTests(TestCase):
             {"item_id": self.item_curry.id, "quantity": 2},  # 280.00 * 2 = 560.00
             {"item_id": item_paneer.id, "quantity": 1},      # 240.00 * 1 = 240.00
         ]
-        # Subtotal = 800.00, 10% discount = 80.00, Taxable = 720.00, 5% GST = 36.00, Tip = 20.00, Total = 776.00
+        # Subtotal = 800.00, Discounts removed (0.00), Taxable = 800.00, 5% GST = 40.00, Tip = 20.00, Total = 860.00
         bill = create_direct_counter_bill(
             items_data=items_data,
             cashier_user=self.cashier,
             customer_name="Ramesh Sharma",
             customer_phone="9876543210",
             order_type="COUNTER",
-            discount_pct=Decimal("10.00"),
             tip_amount=Decimal("20.00"),
             settle_immediately=False,
         )
@@ -1237,10 +1236,10 @@ class CustomerQROrderingAndSystemCompletenessTests(TestCase):
         self.assertEqual(bill.order_type, "COUNTER")
         self.assertEqual(bill.customer_name, "Ramesh Sharma")
         self.assertEqual(bill.subtotal, Decimal("800.00"))
-        self.assertEqual(bill.discount, Decimal("80.00"))
-        self.assertEqual(bill.tax, Decimal("36.00"))
+        self.assertEqual(bill.discount, Decimal("0.00"))
+        self.assertEqual(bill.tax, Decimal("40.00"))
         self.assertEqual(bill.tip, Decimal("20.00"))
-        self.assertEqual(bill.total, Decimal("776.00"))
+        self.assertEqual(bill.total, Decimal("860.00"))
         self.assertEqual(bill.status, "UNPAID")
         self.assertEqual(bill.total_items_count, 2)
 

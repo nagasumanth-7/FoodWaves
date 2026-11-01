@@ -565,16 +565,6 @@
               </div>
 
               <div class="calc-line">
-                <span>Discount (%):</span>
-                <input type="number" step="0.5" min="0" max="100" name="discount_pct" id="discountPctInput" value="0" class="calc-input" oninput="recalculateTotals()">
-              </div>
-
-              <div class="calc-line" id="discountRow" style="display: none; color: #34d399;">
-                <span>Discount Amount:</span>
-                <b id="discountAmountDisplay">-₹0.00</b>
-              </div>
-
-              <div class="calc-line">
                 <span>Restaurant GST (5%):</span>
                 <span id="taxDisplay" style="color: #ffffff;">₹0.00</span>
               </div>
@@ -714,25 +704,13 @@
     const items = Object.values(cart);
     const subtotal = items.reduce((acc, it) => acc + (it.price * it.quantity), 0);
 
-    const discountPct = Math.max(0, parseFloat(document.getElementById('discountPctInput').value) || 0);
-    const discountAmount = subtotal * (discountPct / 100);
-
-    const taxableAmount = Math.max(0, subtotal - discountAmount);
+    const taxableAmount = subtotal;
     const taxAmount = taxableAmount * 0.05; // 5% GST
 
     const tipAmount = Math.max(0, parseFloat(document.getElementById('tipAmountInput').value) || 0);
     const grandTotal = taxableAmount + taxAmount + tipAmount;
 
     document.getElementById('subtotalDisplay').textContent = `₹${subtotal.toFixed(2)}`;
-    
-    const discountRow = document.getElementById('discountRow');
-    if (discountAmount > 0) {
-      discountRow.style.display = 'flex';
-      document.getElementById('discountAmountDisplay').textContent = `-₹${discountAmount.toFixed(2)}`;
-    } else {
-      discountRow.style.display = 'none';
-    }
-
     document.getElementById('taxDisplay').textContent = `₹${taxAmount.toFixed(2)} (CGST 2.5% + SGST 2.5%)`;
     document.getElementById('grandTotalDisplay').textContent = `₹${grandTotal.toFixed(2)}`;
   }

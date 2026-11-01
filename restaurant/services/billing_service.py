@@ -28,8 +28,9 @@ def calculate_and_generate_bill(session, cashier=None, discount_pct=Decimal("0.0
         if subtotal <= Decimal("0.00"):
             raise ValidationError("Cannot generate a bill with 0 total. No served or active items found.")
 
-        discount_amount = (subtotal * (Decimal(str(discount_pct)) / Decimal("100.00"))).quantize(Decimal("0.01"))
-        taxable_amount = max(Decimal("0.00"), subtotal - discount_amount)
+        # Discounts removed: taxable amount is full subtotal
+        discount_amount = Decimal("0.00")
+        taxable_amount = subtotal
         tax_amount = (taxable_amount * GST_RATE).quantize(Decimal("0.01"))
         tip_dec = Decimal(str(tip_amount)).quantize(Decimal("0.01"))
         total_amount = (taxable_amount + tax_amount + tip_dec).quantize(Decimal("0.01"))
@@ -204,10 +205,9 @@ def create_direct_counter_bill(
         if not validated_items:
             raise ValidationError("Please select at least one valid item with quantity greater than 0.")
 
-        # 2. Financial computations
-        disc_pct_dec = Decimal(str(discount_pct or 0))
-        discount_amount = (subtotal * (disc_pct_dec / Decimal("100.00"))).quantize(Decimal("0.01"))
-        taxable_amount = max(Decimal("0.00"), subtotal - discount_amount)
+        # 2. Financial computations (discounts removed)
+        discount_amount = Decimal("0.00")
+        taxable_amount = subtotal
         tax_amount = (taxable_amount * GST_RATE).quantize(Decimal("0.01"))
         tip_dec = Decimal(str(tip_amount or 0)).quantize(Decimal("0.01"))
         total_amount = (taxable_amount + tax_amount + tip_dec).quantize(Decimal("0.01"))
@@ -359,12 +359,12 @@ def get_sales_report_summary(start_date=None, end_date=None, period="today"):
     upi_total = payments_qs.filter(payment_method="UPI").aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
     card_total = payments_qs.filter(payment_method="CARD").aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
 
-    # Linked settled bills aggregates (subtotal, tax, discount, tip)
+    # Linked settled bills aggregates (subtotal, tax, tip)
     paid_bills_qs = Bill.objects.filter(
         pk__in=payments_qs.values_list("bill_id", flat=True)
     )
     subtotal_sum = paid_bills_qs.aggregate(total=Sum("subtotal"))["total"] or Decimal("0.00")
-    discount_sum = paid_bills_qs.aggregate(total=Sum("discount"))["total"] or Decimal("0.00")
+    discount_sum = Decimal("0.00")
     tax_sum = paid_bills_qs.aggregate(total=Sum("tax"))["total"] or Decimal("0.00")
     tip_sum = paid_bills_qs.aggregate(total=Sum("tip"))["total"] or Decimal("0.00")
 
