@@ -118,6 +118,33 @@
       font-size: 11px;
     }
 
+    .img-preview-box {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      margin-top: 10px;
+      padding: 12px 16px;
+      background: rgba(4, 14, 30, 0.65);
+      border: 1px dashed var(--border-glass);
+      border-radius: var(--radius-md);
+    }
+
+    .img-preview-thumb {
+      width: 90px;
+      height: 90px;
+      border-radius: 8px;
+      object-fit: cover;
+      border: 1px solid var(--border-glass);
+      background: #030d1d;
+      flex-shrink: 0;
+    }
+
+    .img-preview-info {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
     .form-footer-btns {
       display: flex;
       justify-content: flex-end;
@@ -174,6 +201,17 @@
               {% if form.category.errors %}
                 <ul class="field-errors">{% for error in form.category.errors %}<li>{{ error }}</li>{% endfor %}</ul>
               {% endif %}
+
+              <div style="margin-top: 10px; padding: 10px 12px; background: rgba(5, 17, 36, 0.55); border: 1px dashed rgba(121, 202, 255, 0.25); border-radius: 10px;">
+                <label for="id_new_category_name" style="font-size: 11px; color: var(--cyan); font-weight: 700; display: block; margin-bottom: 6px;">
+                  ＋ Or Create &amp; Select New Category:
+                </label>
+                {{ form.new_category_name }}
+                {% if form.new_category_name.errors %}
+                  <ul class="field-errors">{% for error in form.new_category_name.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                {% endif %}
+                <span class="field-hint" style="font-size: 10px; margin-top: 4px; display: block;">Enter a new category name (e.g. Seafood, Chef Specials) to add it instantly to the menu.</span>
+              </div>
             </div>
 
             <div class="form-group">
@@ -186,12 +224,12 @@
           </div>
 
           <div class="form-group">
-            <label for="id_description">Culinary Description</label>
+            <label for="id_description">Descriptive Details about the Food (Ingredients, Style & Taste) *</label>
             {{ form.description }}
             {% if form.description.errors %}
               <ul class="field-errors">{% for error in form.description.errors %}<li>{{ error }}</li>{% endfor %}</ul>
             {% endif %}
-            <span class="field-hint">Ingredients, traditional preparation style, and flavor profile.</span>
+            <span class="field-hint">Specify key ingredients (e.g. Guntur chillies, desi cow ghee, country chicken), cooking techniques (slow dum, charcoal tandoor, iron tawa), spice intensity, and mouth-watering flavor notes.</span>
           </div>
 
           <div class="form-row">
@@ -213,31 +251,32 @@
           </div>
 
           <div class="form-group">
-            <label for="id_image">Dish Image (Optional)</label>
-            {% if is_edit and item.image %}
-              <div style="font-size: 12px; color: var(--text-dim); margin-bottom: 6px;">
-                Current: <a href="{{ item.image.url }}" target="_blank" style="color: var(--cyan);">{{ item.image.name }}</a>
-              </div>
-            {% endif %}
+            <label for="id_image">Dish Photo (High-Resolution Visual)</label>
             {{ form.image }}
             {% if form.image.errors %}
               <ul class="field-errors">{% for error in form.image.errors %}<li>{{ error }}</li>{% endfor %}</ul>
             {% endif %}
-            <span class="field-hint">PNG, JPG, WEBP formats up to 5MB.</span>
+            <span class="field-hint">Upload high-res JPG, PNG, WEBP, or AVIF image (up to 5MB). Live preview below:</span>
+
+            <div class="img-preview-box" id="previewContainer">
+              <img 
+                id="imagePreview" 
+                class="img-preview-thumb" 
+                src="{% if is_edit and item.photo_url %}{{ item.photo_url }}{% else %}https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=600&q=80{% endif %}" 
+                alt="Dish preview"
+              >
+              <div class="img-preview-info">
+                <strong id="previewTitle" style="color: #ffffff; display: block; margin-bottom: 2px;">
+                  {% if is_edit and item.image %}Custom Uploaded: {{ item.image.name }}{% elif is_edit %}Curated High-Res Culinary Photo{% else %}Default Visual Preview{% endif %}
+                </strong>
+                <span id="previewSubtext">Selecting a photo file will instantly update this preview.</span>
+              </div>
+            </div>
           </div>
 
           <div class="form-check-row">
             {{ form.is_available }}
             <label for="id_is_available">Available for Kitchen Orders (Currently In Stock)</label>
-          </div>
-
-          <div class="form-group">
-            <label for="id_availability_reason">Unavailable Reason (if unchecked)</label>
-            {{ form.availability_reason }}
-            {% if form.availability_reason.errors %}
-              <ul class="field-errors">{% for error in form.availability_reason.errors %}<li>{{ error }}</li>{% endfor %}</ul>
-            {% endif %}
-            <span class="field-hint">e.g., "Paneer stock finished", "Fresh sea fish arriving tomorrow".</span>
           </div>
 
           <div class="form-footer-btns">
@@ -250,5 +289,48 @@
       </div>
     </div>
   </section>
+{% endblock %}
+
+{% block scripts %}
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const fileInput = document.getElementById("id_image");
+      const previewImg = document.getElementById("imagePreview");
+      const previewTitle = document.getElementById("previewTitle");
+      const previewSubtext = document.getElementById("previewSubtext");
+
+      if (fileInput && previewImg) {
+        fileInput.addEventListener("change", (e) => {
+          const file = e.target.files && e.target.files[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              previewImg.src = event.target.result;
+              if (previewTitle) previewTitle.textContent = "New Photo Selected: " + file.name;
+              if (previewSubtext) previewSubtext.textContent = (file.size / 1024).toFixed(1) + " KB • Ready to save on submission.";
+            };
+            reader.readAsDataURL(file);
+          }
+        });
+      }
+
+      const catSelect = document.getElementById("id_category");
+      const newCatInput = document.getElementById("id_new_category_name");
+
+      if (catSelect && newCatInput) {
+        newCatInput.addEventListener("input", () => {
+          if (newCatInput.value.trim().length > 0) {
+            catSelect.value = "";
+          }
+        });
+
+        catSelect.addEventListener("change", () => {
+          if (catSelect.value) {
+            newCatInput.value = "";
+          }
+        });
+      }
+    });
+  </script>
 {% endblock %}
 

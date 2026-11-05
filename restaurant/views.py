@@ -934,6 +934,22 @@ def manager_menu_list(request):
     )
     categories = MenuCategory.objects.all().order_by("name")
 
+    base_items = MenuItem.objects.all()
+    if category_id and category_id.isdigit():
+        base_items = base_items.filter(category_id=category_id)
+    if search_query:
+        query = search_query.strip()
+        base_items = base_items.filter(
+            Q(name__icontains=query) |
+            Q(description__icontains=query) |
+            Q(category__name__icontains=query)
+        )
+
+    available_count = base_items.filter(is_active=True, is_available=True).count()
+    unavailable_count = base_items.filter(is_active=True, is_available=False).count()
+    archived_count = base_items.filter(is_active=False).count()
+    total_count = base_items.count()
+
     return render(
         request,
         "restaurant/manager/menu.html",
@@ -943,7 +959,10 @@ def manager_menu_list(request):
             "selected_category": int(category_id) if category_id and category_id.isdigit() else None,
             "selected_status": status_filter,
             "search_query": search_query,
-            "total_count": items.count(),
+            "total_count": total_count,
+            "available_count": available_count,
+            "unavailable_count": unavailable_count,
+            "archived_count": archived_count,
         },
     )
 
@@ -956,8 +975,13 @@ def manager_menu_add(request):
     if request.method == "POST":
         form = MenuItemForm(request.POST, request.FILES)
         if form.is_valid():
-            item = form.save()
-            messages.success(request, f"Menu item '{item.name}' added successfully.")
+            item = form.save(commit=False)
+            item.is_active = True
+            if not item.is_available:
+                item.availability_updated_at = timezone.now()
+                item.availability_updated_by = request.user
+            item.save()
+            messages.success(request, f"Menu item '{item.name}' added successfully and is available.")
             return redirect("restaurant:manager_menu_list")
     else:
         form = MenuItemForm()
@@ -985,6 +1009,7 @@ def manager_menu_edit(request, item_id):
         if form.is_valid():
             was_available = item.is_available
             updated_item = form.save(commit=False)
+            updated_item.is_active = True
 
             # Track availability change
             if was_available != updated_item.is_available:
@@ -1040,6 +1065,35 @@ def manager_menu_delete(request, item_id):
             "has_orders": has_orders,
         },
     )
+
+
+@manager_required
+def manager_menu_toggle_availability(request, item_id):
+    """
+    Manager or Admin marks a menu item as available or unavailable directly (Section 8-10).
+    Allows toggling active and archived items.
+    """
+    item = get_object_or_404(MenuItem, pk=item_id)
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        was_archived = not item.is_active
+
+        if action == "mark_available":
+            update_menu_item_availability(item, is_available=True, reason="", user=request.user)
+            if was_archived:
+                messages.success(request, f"'{item.name}' unarchived and is now marked as AVAILABLE for ordering.")
+            else:
+                messages.success(request, f"'{item.name}' is now marked as AVAILABLE for ordering.")
+        elif action == "mark_unavailable":
+            update_menu_item_availability(item, is_available=False, reason="", user=request.user)
+            if was_archived:
+                messages.warning(request, f"'{item.name}' unarchived and marked as UNAVAILABLE.")
+            else:
+                messages.warning(request, f"'{item.name}' marked as UNAVAILABLE.")
+
+    redirect_url = request.META.get("HTTP_REFERER") or "restaurant:manager_menu_list"
+    return redirect(redirect_url)
 
 
 # ==============================================================================

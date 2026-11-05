@@ -1,7 +1,7 @@
 :root {
-  --bg-deep: #030813;
-  --bg-dark: #061124;
-  --bg-surface: #0a1b33;
+  --bg-deep: #051329;
+  --bg-dark: #071936;
+  --bg-surface: #0a2144;
   --bg-card: rgba(11, 27, 51, 0.75);
   --bg-card-hover: rgba(16, 36, 68, 0.88);
   --bg-glass: rgba(8, 21, 40, 0.65);
@@ -43,9 +43,9 @@ body {
   margin: 0;
   background-color: var(--bg-deep);
   background-image: 
-    radial-gradient(circle at 15% 15%, rgba(91, 214, 255, 0.08), transparent 40%),
-    radial-gradient(circle at 85% 65%, rgba(20, 184, 166, 0.07), transparent 45%),
-    radial-gradient(circle at 50% 90%, rgba(243, 194, 113, 0.05), transparent 40%);
+    radial-gradient(circle at 15% 15%, rgba(91, 214, 255, 0.12), transparent 45%),
+    radial-gradient(circle at 85% 55%, rgba(20, 184, 166, 0.1), transparent 45%),
+    radial-gradient(circle at 50% 85%, rgba(243, 194, 113, 0.08), transparent 45%);
   background-attachment: fixed;
   color: var(--text-primary);
   font-family: var(--sans);
@@ -580,13 +580,13 @@ select option {
 /* Luxury Multi-Column Footer */
 .site-footer {
   border-top: 1px solid var(--border-glass);
-  padding: 80px max(7vw, 24px) 36px;
-  background: linear-gradient(180deg, #030813 0%, #050f20 100%);
+  padding: 60px max(7vw, 24px) 32px;
+  background: linear-gradient(180deg, #06152e 0%, #040e20 100%);
   position: relative;
   overflow: hidden;
   color: var(--text-muted);
   font-size: 13px;
-  margin-top: 80px;
+  margin-top: 0;
 }
 
 .footer-top-accent {

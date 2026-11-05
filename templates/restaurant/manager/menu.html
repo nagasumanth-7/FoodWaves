@@ -123,16 +123,17 @@
     }
 
     .dish-card {
-      background: rgba(9, 23, 44, 0.75);
+      background: rgba(9, 23, 44, 0.78);
       border: 1px solid var(--border-glass);
       border-radius: var(--radius-lg);
-      padding: 24px;
+      padding: 0;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
       box-shadow: var(--shadow-card);
       backdrop-filter: blur(16px);
       transition: transform 0.2s, border-color 0.2s;
+      overflow: hidden;
     }
 
     .dish-card:hover {
@@ -140,13 +141,56 @@
       border-color: var(--border-glow);
     }
 
-    .dish-card.card-archived {
-      opacity: 0.6;
-      border-color: rgba(156, 163, 175, 0.3);
+    .dish-media {
+      position: relative;
+      width: 100%;
+      height: 160px;
+      overflow: hidden;
+      background: rgba(4, 14, 30, 0.95);
+    }
+
+    .dish-media img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.4s ease;
+    }
+
+    .dish-card:hover .dish-media img {
+      transform: scale(1.05);
+    }
+
+    .dish-badge-overlay {
+      position: absolute;
+      top: 10px;
+      left: 12px;
+      font: 700 9px var(--mono);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: #031426;
+      background: linear-gradient(135deg, #7dffef 0%, #4ad3ff 100%);
+      padding: 3px 9px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      z-index: 2;
+    }
+
+    .dish-content {
+      padding: 18px 20px 16px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      justify-content: space-between;
     }
 
     .dish-card.card-unavailable {
       border-color: rgba(239, 68, 68, 0.35);
+    }
+
+    .dish-card.card-archived {
+      border-color: rgba(148, 163, 184, 0.35);
+      opacity: 0.9;
     }
 
     .dish-top {
@@ -223,19 +267,9 @@
     }
 
     .status-archived {
-      background: rgba(156, 163, 175, 0.15);
-      color: #9ca3af;
-      border: 1px solid rgba(156, 163, 175, 0.3);
-    }
-
-    .reason-box {
-      font-size: 11px;
-      color: #f87171;
-      background: rgba(239, 68, 68, 0.08);
-      border-left: 3px solid #ef4444;
-      padding: 6px 10px;
-      border-radius: 4px;
-      margin-bottom: 16px;
+      background: rgba(148, 163, 184, 0.15);
+      color: #cbd5e1;
+      border: 1px solid rgba(148, 163, 184, 0.3);
     }
 
     .dish-actions {
@@ -270,6 +304,38 @@
     }
     .btn-delete:hover {
       background: rgba(239, 68, 68, 0.22);
+    }
+
+    .btn-toggle-avail {
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      font: 700 11px var(--mono);
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.4);
+      color: #34d399;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-toggle-avail:hover {
+      background: rgba(16, 185, 129, 0.3);
+      color: #ffffff;
+      transform: translateY(-1px);
+    }
+
+    .btn-toggle-unavail {
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      font: 700 11px var(--mono);
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #fca5a5;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-toggle-unavail:hover {
+      background: rgba(239, 68, 68, 0.25);
+      color: #ffffff;
+      transform: translateY(-1px);
     }
   </style>
 {% endblock %}
@@ -317,15 +383,15 @@
         </div>
 
         <!-- Secondary status filters -->
-        <div style="display: flex; gap: 10px; font-size: 12px; align-items: center; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px;">
+        <div style="display: flex; gap: 10px; font-size: 12px; align-items: center; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px; flex-wrap: wrap;">
           <span style="color: var(--text-dim); font-family: var(--mono); font-size: 11px;">STATUS:</span>
           <a href="?{% if selected_category %}category={{ selected_category }}&{% endif %}{% if search_query %}q={{ search_query }}{% endif %}" style="color: {% if not selected_status %}var(--cyan){% else %}var(--text-muted){% endif %}; text-decoration: none;">All ({{ total_count }})</a>
           <span style="color:var(--border-glass);">|</span>
-          <a href="?status=available{% if selected_category %}&category={{ selected_category }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}" style="color: {% if selected_status == 'available' %}#34d399{% else %}var(--text-muted){% endif %}; text-decoration: none;">🟢 Available</a>
+          <a href="?status=available{% if selected_category %}&category={{ selected_category }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}" style="color: {% if selected_status == 'available' %}#34d399{% else %}var(--text-muted){% endif %}; text-decoration: none;">🟢 Available ({{ available_count }})</a>
           <span style="color:var(--border-glass);">|</span>
-          <a href="?status=unavailable{% if selected_category %}&category={{ selected_category }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}" style="color: {% if selected_status == 'unavailable' %}#f87171{% else %}var(--text-muted){% endif %}; text-decoration: none;">🔴 Unavailable</a>
+          <a href="?status=unavailable{% if selected_category %}&category={{ selected_category }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}" style="color: {% if selected_status == 'unavailable' %}#f87171{% else %}var(--text-muted){% endif %}; text-decoration: none;">🔴 Unavailable ({{ unavailable_count }})</a>
           <span style="color:var(--border-glass);">|</span>
-          <a href="?status=archived{% if selected_category %}&category={{ selected_category }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}" style="color: {% if selected_status == 'archived' %}#9ca3af{% else %}var(--text-muted){% endif %}; text-decoration: none;">⚪ Archived</a>
+          <a href="?status=archived{% if selected_category %}&category={{ selected_category }}{% endif %}{% if search_query %}&q={{ search_query }}{% endif %}" style="color: {% if selected_status == 'archived' %}#94a3b8{% else %}var(--text-muted){% endif %}; text-decoration: none;">⚪ Archived ({{ archived_count }})</a>
         </div>
       </div>
 
@@ -333,42 +399,79 @@
       <div class="menu-cards-grid">
         {% for item in items %}
           <div class="dish-card card-3d {% if not item.is_active %}card-archived{% elif not item.is_available %}card-unavailable{% endif %}">
-            <div>
-              <div class="dish-top">
-                <h3 class="dish-title">{{ item.name }}</h3>
-                <span class="dish-price">₹ {{ item.price }}</span>
-              </div>
-              <span class="dish-category">{{ item.category.name }}</span>
-              <p class="dish-desc">{{ item.description }}</p>
+            <div class="dish-media">
+              <span class="dish-badge-overlay">{{ item.category.name }}</span>
+              <img 
+                src="{{ item.photo_url }}" 
+                alt="{{ item.name }}" 
+                loading="lazy"
+                onerror="this.onerror=null; this.src='https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=600&q=80';"
+              >
             </div>
 
-            <div>
-              {% if not item.is_available and item.availability_reason %}
-                <div class="reason-box">
-                  <b>Reason:</b> {{ item.availability_reason }}
+            <div class="dish-content">
+              <div>
+                <div class="dish-top">
+                  <h3 class="dish-title">{{ item.name }}</h3>
+                  <span class="dish-price">₹ {{ item.price }}</span>
                 </div>
-              {% endif %}
-
-              <div class="dish-meta">
-                <span>⏱ {{ item.preparation_time }} mins</span>
-                <div>
-                  {% if not item.is_active %}
-                    <span class="status-badge status-archived">⚪ Archived</span>
-                  {% elif item.is_available %}
-                    <span class="status-badge status-available">🟢 Available</span>
-                  {% else %}
-                    <span class="status-badge status-unavailable">🔴 Unavailable</span>
-                  {% endif %}
-                </div>
+                <p class="dish-desc">{{ item.description }}</p>
               </div>
 
-              <div class="dish-actions">
-                <a class="btn-edit" href="{% url 'restaurant:manager_menu_edit' item.id %}">
-                  Edit Item
-                </a>
-                <a class="btn-delete" href="{% url 'restaurant:manager_menu_delete' item.id %}">
-                  {% if not item.is_active %}Delete Permanently{% else %}Delete{% endif %}
-                </a>
+              <div>
+                <div class="dish-meta">
+                  <span>⏱ {{ item.preparation_time }} mins</span>
+                  <div>
+                    {% if not item.is_active %}
+                      <span class="status-badge status-archived">⚪ Archived</span>
+                    {% elif item.is_available %}
+                      <span class="status-badge status-available">🟢 Available</span>
+                    {% else %}
+                      <span class="status-badge status-unavailable">🔴 Unavailable</span>
+                    {% endif %}
+                  </div>
+                </div>
+
+                <div class="dish-actions">
+                  {% if not item.is_active %}
+                    <form method="POST" action="{% url 'restaurant:manager_menu_toggle_availability' item.id %}" style="display:inline;">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="mark_available">
+                      <button type="submit" class="btn-toggle-avail" title="Make dish active & available">
+                        ✓ Make Available
+                      </button>
+                    </form>
+                    <form method="POST" action="{% url 'restaurant:manager_menu_toggle_availability' item.id %}" style="display:inline;">
+                      {% csrf_token %}
+                      <input type="hidden" name="action" value="mark_unavailable">
+                      <button type="submit" class="btn-toggle-unavail" title="Make dish active & unavailable">
+                        ✕ Make Unavailable
+                      </button>
+                    </form>
+                  {% else %}
+                    <form method="POST" action="{% url 'restaurant:manager_menu_toggle_availability' item.id %}" style="display:inline;">
+                      {% csrf_token %}
+                      {% if item.is_available %}
+                        <input type="hidden" name="action" value="mark_unavailable">
+                        <button type="submit" class="btn-toggle-unavail" title="Mark unavailable for customer ordering">
+                          ✕ Mark Unavailable
+                        </button>
+                      {% else %}
+                        <input type="hidden" name="action" value="mark_available">
+                        <button type="submit" class="btn-toggle-avail" title="Restore to live kitchen menu">
+                          ✓ Mark Available
+                        </button>
+                      {% endif %}
+                    </form>
+                  {% endif %}
+
+                  <a class="btn-edit" href="{% url 'restaurant:manager_menu_edit' item.id %}">
+                    Edit
+                  </a>
+                  <a class="btn-delete" href="{% url 'restaurant:manager_menu_delete' item.id %}">
+                    {% if not item.is_active %}Delete Permanently{% else %}Delete{% endif %}
+                  </a>
+                </div>
               </div>
             </div>
           </div>

@@ -343,6 +343,7 @@ class MenuManagementAndSecurityTests(TestCase):
         self.client = Client()
 
         # Groups
+        self.admin_group, _ = Group.objects.get_or_create(name="ADMIN")
         self.manager_group, _ = Group.objects.get_or_create(name="MANAGER")
         self.chef_group, _ = Group.objects.get_or_create(name="CHEF")
         self.waiter_group, _ = Group.objects.get_or_create(name="WAITER")
@@ -350,6 +351,9 @@ class MenuManagementAndSecurityTests(TestCase):
         self.customer_group, _ = Group.objects.get_or_create(name="CUSTOMER")
 
         # Users
+        self.admin = User.objects.create_user(username="admin@test.com", email="admin@test.com", password="Pass", is_active=True, is_staff=True)
+        self.admin.groups.add(self.admin_group)
+
         self.customer = User.objects.create_user(username="cust@test.com", email="cust@test.com", password="Pass", is_active=True)
         self.customer.groups.add(self.customer_group)
 
@@ -431,8 +435,34 @@ class MenuManagementAndSecurityTests(TestCase):
 
         item = MenuItem.objects.filter(name="Andhra Chicken 65").first()
         self.assertIsNotNone(item)
+        self.assertTrue(item.is_active)
+        self.assertTrue(item.is_available)
         self.assertEqual(item.price, Decimal("290.00"))
         self.assertEqual(item.preparation_time, 15)
+
+    # 3b. Manager can add menu item with a newly entered category name
+    def test_manager_can_add_menu_item_with_new_category(self):
+        self.client.force_login(self.manager)
+        data = {
+            "category": "",
+            "new_category_name": "Coastal Seafood",
+            "name": "Apollo Fish Fry",
+            "description": "Crispy spiced fresh river sole tossed in curry leaves and green chillies",
+            "price": "340.00",
+            "preparation_time": 18,
+            "is_available": True,
+        }
+        response = self.client.post(self.mgr_add_url, data)
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, self.mgr_menu_url)
+
+        item = MenuItem.objects.filter(name="Apollo Fish Fry").first()
+        self.assertIsNotNone(item)
+        self.assertTrue(item.is_active)
+        self.assertTrue(item.is_available)
+        self.assertEqual(item.category.name, "Coastal Seafood")
+        self.assertTrue(item.category.is_active)
+        self.assertEqual(item.price, Decimal("340.00"))
 
     # 4. Manager can edit menu item (Item 5)
     def test_manager_can_edit_menu_item(self):
@@ -453,6 +483,77 @@ class MenuManagementAndSecurityTests(TestCase):
         self.assertEqual(self.item_biryani.name, "Special Chicken Biryani")
         self.assertEqual(self.item_biryani.price, Decimal("320.00"))
         self.assertEqual(self.item_biryani.preparation_time, 30)
+
+    # 4b. Manager and Admin can toggle menu item availability (mark unavailable & available)
+    def test_manager_and_admin_can_toggle_item_availability(self):
+        self.client.force_login(self.manager)
+        toggle_url = reverse("restaurant:manager_menu_toggle_availability", kwargs={"item_id": self.item_biryani.id})
+
+        # Manager marks item as unavailable directly
+        resp = self.client.post(toggle_url, {"action": "mark_unavailable"})
+        self.assertEqual(resp.status_code, 302)
+
+        self.item_biryani.refresh_from_db()
+        self.assertFalse(self.item_biryani.is_available)
+        self.assertEqual(self.item_biryani.availability_updated_by, self.manager)
+
+        # Admin logs in and marks item back as available
+        self.client.force_login(self.admin)
+        resp2 = self.client.post(toggle_url, {"action": "mark_available"})
+        self.assertEqual(resp2.status_code, 302)
+
+        self.item_biryani.refresh_from_db()
+        self.assertTrue(self.item_biryani.is_available)
+        self.assertEqual(self.item_biryani.availability_updated_by, self.admin)
+
+    # 4c. Admin and Manager can make archived dishes available or unavailable
+    def test_manager_and_admin_can_toggle_archived_item_to_available_and_unavailable(self):
+        # Create an archived item
+        archived_item = MenuItem.objects.create(
+            category=self.cat_biryani,
+            name="Archived Mutton Biryani",
+            description="Classic mutton biryani",
+            price=Decimal("450.00"),
+            preparation_time=35,
+            is_active=False,
+            is_available=False,
+        )
+
+        toggle_url = reverse("restaurant:manager_menu_toggle_availability", kwargs={"item_id": archived_item.id})
+
+        # Admin logs in and marks the archived item as AVAILABLE
+        self.client.force_login(self.admin)
+        resp1 = self.client.post(toggle_url, {"action": "mark_available"})
+        self.assertEqual(resp1.status_code, 302)
+
+        archived_item.refresh_from_db()
+        self.assertTrue(archived_item.is_active, "Dish should now be active/unarchived")
+        self.assertTrue(archived_item.is_available, "Dish should now be available")
+        self.assertEqual(archived_item.availability_updated_by, self.admin)
+
+        # Now re-archive the item manually to test making it UNAVAILABLE from archived state
+        archived_item.is_active = False
+        archived_item.save(update_fields=["is_active"])
+
+        # Manager logs in and marks the archived item as UNAVAILABLE
+        self.client.force_login(self.manager)
+        resp2 = self.client.post(toggle_url, {"action": "mark_unavailable"})
+        self.assertEqual(resp2.status_code, 302)
+
+        archived_item.refresh_from_db()
+        self.assertTrue(archived_item.is_active, "Dish should now be active/restored into catalog")
+        self.assertFalse(archived_item.is_available, "Dish should be marked unavailable")
+        self.assertEqual(archived_item.availability_updated_by, self.manager)
+
+        # Verify manager menu list filters and displays archived items
+        archived_item.is_active = False
+        archived_item.save(update_fields=["is_active"])
+        list_url = reverse("restaurant:manager_menu_list") + "?status=archived"
+        resp_list = self.client.get(list_url)
+        self.assertEqual(resp_list.status_code, 200)
+        self.assertContains(resp_list, "Archived Mutton Biryani")
+        self.assertIn("archived_count", resp_list.context)
+        self.assertGreaterEqual(resp_list.context["archived_count"], 1)
 
     # 5. Manager can permanently delete unused item (Item 6)
     def test_manager_delete_unused_item_permanently_deletes(self):

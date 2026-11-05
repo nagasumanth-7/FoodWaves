@@ -237,6 +237,16 @@ class MenuCategoryForm(forms.ModelForm):
 
 
 class MenuItemForm(forms.ModelForm):
+    new_category_name = forms.CharField(
+        required=False,
+        max_length=100,
+        widget=forms.TextInput(attrs={
+            "placeholder": "Or type new category name (e.g. Seafood, Chef Specials)",
+            "class": "form-control",
+            "id": "id_new_category_name",
+        }),
+    )
+
     class Meta:
         from .models import MenuItem
         model = MenuItem
@@ -247,21 +257,55 @@ class MenuItemForm(forms.ModelForm):
             "price",
             "image",
             "preparation_time",
-            "is_active",
+            "is_available",
         ]
         widgets = {
-            "category": forms.Select(attrs={"class": "form-control"}),
+            "category": forms.Select(attrs={"class": "form-control", "id": "id_category"}),
             "name": forms.TextInput(attrs={"placeholder": "e.g. Andhra Chicken 65", "class": "form-control"}),
             "description": forms.Textarea(attrs={
-                "rows": 3,
-                "placeholder": "Dish description, aromatic spices, origin...",
+                "rows": 4,
+                "placeholder": "Detailed food description: fresh ingredients, traditional preparation style, spice profile, and flavor notes...",
                 "class": "form-control",
             }),
             "price": forms.NumberInput(attrs={"min": "0", "step": "0.01", "placeholder": "290.00", "class": "form-control"}),
             "image": forms.FileInput(attrs={"class": "form-control", "accept": "image/*"}),
             "preparation_time": forms.NumberInput(attrs={"min": "1", "max": "180", "placeholder": "15", "class": "form-control"}),
-            "is_active": forms.CheckboxInput(attrs={"class": "form-check-input"}),
+            "is_available": forms.CheckboxInput(attrs={"class": "form-check-input"}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "category" in self.fields:
+            self.fields["category"].required = False
+            self.fields["category"].empty_label = "-- Select Category --"
+        if "is_available" in self.fields and not getattr(self.instance, "pk", None):
+            self.fields["is_available"].initial = True
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.is_active = True
+        if commit:
+            instance.save()
+        return instance
+
+    def clean(self):
+        cleaned_data = super().clean()
+        new_cat = cleaned_data.get("new_category_name", "").strip()
+        category = cleaned_data.get("category")
+
+        if new_cat:
+            from .models import MenuCategory
+            # Normalize title-cased category name
+            cat_name = " ".join(word.capitalize() for word in new_cat.split())
+            cat_obj = MenuCategory.objects.filter(name__iexact=cat_name).first()
+            if not cat_obj:
+                cat_obj = MenuCategory.objects.create(name=cat_name, is_active=True)
+            cleaned_data["category"] = cat_obj
+            self.instance.category = cat_obj
+        elif not category:
+            self.add_error("category", "Please select an existing category or enter a new category name.")
+
+        return cleaned_data
 
     def clean_name(self):
         name = self.cleaned_data.get("name", "").strip()

@@ -27,7 +27,7 @@ def get_active_menu_items(category_id=None, search_query=None):
 
 def get_all_menu_items_for_manager(category_id=None, status_filter=None, search_query=None):
     """
-    Returns menu items for the manager dashboard including active and archived items.
+    Returns menu items for the manager catalog with available, unavailable, and archived status filters.
     """
     queryset = MenuItem.objects.select_related("category").all()
     if category_id:
@@ -64,13 +64,16 @@ def validate_menu_item_availability(menu_item):
 def update_menu_item_availability(menu_item, is_available: bool, reason: str = "", user=None):
     """
     Updates the availability of a menu item (used by Chef and Manager).
+    Restores archived items to active state when toggled.
     """
+    menu_item.is_active = True
     menu_item.is_available = is_available
     menu_item.availability_reason = reason.strip() if not is_available else ""
     menu_item.availability_updated_at = timezone.now()
     if user and user.is_authenticated:
         menu_item.availability_updated_by = user
     menu_item.save(update_fields=[
+        "is_active",
         "is_available",
         "availability_reason",
         "availability_updated_at",

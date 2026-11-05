@@ -45,28 +45,28 @@ class Command(BaseCommand):
             {
                 "category": "Starters",
                 "name": "Pesarattu",
-                "description": "Crispy whole green gram crepe, served with spicy allam (ginger) chutney and coconut relish.",
+                "description": "Nutritious, crispy golden crepe crafted from soaked green gram batter and seasoned with fresh green chillies and cumin. Served steaming hot with zesty allam (ginger) pachadi and fresh coconut relish.",
                 "price": Decimal("140.00"),
                 "preparation_time": 10,
             },
             {
                 "category": "Starters",
                 "name": "Andhra Chicken 65",
-                "description": "Crispy boneless tender chicken morsels tossed in curry leaves, garlic, and crushed Guntur chilli.",
+                "description": "Fiery and crisp boneless country chicken morsels marinated in crushed Guntur red chillies, ginger-garlic paste, and heritage spices, flash-tossed with fresh curry leaves and slivered garlic.",
                 "price": Decimal("290.00"),
                 "preparation_time": 15,
             },
             {
                 "category": "Starters",
                 "name": "Paneer Tikka",
-                "description": "Smoky tandoor-charred cottage cheese cubes marinated in aromatic spices and hung curd.",
+                "description": "Prime malai cottage cheese cubes infused in mustard oil, roasted cumin, and thick hung curd marinade, skewer-roasted over glowing charcoal until smoky with blistered bell peppers and red onions.",
                 "price": Decimal("240.00"),
                 "preparation_time": 15,
             },
             {
                 "category": "Starters",
                 "name": "Gobi Manchurian",
-                "description": "Crisp cauliflower florets tossed in tangy Indo-Chinese garlic soy reduction.",
+                "description": "Crisp cauliflower florets tossed in a blazing wok with ginger, garlic, spring onions, and a sticky sweet-savory Indo-Chinese garlic soya reduction.",
                 "price": Decimal("210.00"),
                 "preparation_time": 15,
             },
@@ -75,28 +75,28 @@ class Command(BaseCommand):
             {
                 "category": "Tiffins",
                 "name": "Plain Dosa",
-                "description": "Classic crisp golden rice-lentil crepe served with sambar and fresh coconut chutneys.",
+                "description": "Ultra-crisp, wafer-thin golden fermented rice and urad dal crepe cooked on an artisanal cast-iron griddle with pure cow ghee. Accompanied by fragrant lentil sambar and freshly ground coconut chutney.",
                 "price": Decimal("80.00"),
                 "preparation_time": 8,
             },
             {
                 "category": "Tiffins",
                 "name": "Masala Dosa",
-                "description": "Golden crisp crepe filled with spiced potato masala, paired with coastal chutneys.",
+                "description": "Signature coastal crepe roasted golden-brown in country ghee, folded around an aromatic turmeric-spiced potato and onion filling, served alongside fresh coconut relish and piping hot drumstick sambar.",
                 "price": Decimal("120.00"),
                 "preparation_time": 10,
             },
             {
                 "category": "Tiffins",
                 "name": "Idly",
-                "description": "Steamed fluffy rice cakes served steaming hot with spiced lentil sambar and chutneys.",
+                "description": "Fluffy, feather-light steamed cakes prepared from slowly stone-ground rice and urad dal batter. Served piping hot with spiced vegetable sambar and spicy Andhra tomato-coconut pachadi.",
                 "price": Decimal("70.00"),
                 "preparation_time": 8,
             },
             {
                 "category": "Tiffins",
                 "name": "Vada",
-                "description": "Crisp golden fried medu vadas with a soft fluffy interior, served with coconut relish.",
+                "description": "Traditional South Indian medu vadas, crispy and golden on the outside with an airy, soft spiced center studded with whole black peppercorns, fresh ginger, and curry leaves.",
                 "price": Decimal("70.00"),
                 "preparation_time": 8,
             },
@@ -105,28 +105,28 @@ class Command(BaseCommand):
             {
                 "category": "Curries",
                 "name": "Butter Chicken",
-                "description": "Tender chicken cooked in rich satin tomato, cashew butter gravy, and dried fenugreek leaves.",
+                "description": "Char-grilled tandoori chicken tikka simmered in a velvety, satin gravy of ripe Roma tomatoes, cashew butter, honey, and aromatic roasted kasoori methi with fresh cream.",
                 "price": Decimal("280.00"),
                 "preparation_time": 20,
             },
             {
                 "category": "Curries",
                 "name": "Paneer Butter Masala",
-                "description": "Hand-crafted cottage cheese cubes simmered in a velvety tomato-cashew butter sauce.",
+                "description": "Handmade soft cottage cheese cubes simmered in a creamy, mild tomato-cashew reduction delicately scented with green cardamom, mace, and crushed fenugreek leaves.",
                 "price": Decimal("240.00"),
                 "preparation_time": 20,
             },
             {
                 "category": "Curries",
                 "name": "Andhra Chicken Curry",
-                "description": "Traditional rustic country chicken curry bursting with roasted coriander, poppy seeds, and cloves.",
+                "description": "Heritage Andhra country chicken simmered slowly in a deeply spiced rustic masala paste made of roasted coriander, poppy seeds, cloves, and fiery Guntur chillies.",
                 "price": Decimal("290.00"),
                 "preparation_time": 25,
             },
             {
                 "category": "Curries",
                 "name": "Dal Tadka",
-                "description": "Yellow lentils slow-cooked and tempered with garlic, cumin, whole red chillies, and pure ghee.",
+                "description": "Arhar and moong yellow lentils slow-cooked till creamy, then finished with a crackling tadka of golden fried garlic, cumin seeds, whole red chillies, and aromatic desi cow ghee.",
                 "price": Decimal("160.00"),
                 "preparation_time": 15,
             },
@@ -135,21 +135,21 @@ class Command(BaseCommand):
             {
                 "category": "Rice & Biryani",
                 "name": "Chicken Biryani",
-                "description": "Aromatic long-grain basmati rice layered with succulent marinated chicken, saffron, and fried onions.",
+                "description": "Royal Hyderabadi dum biryani featuring fragrant aged long-grain basmati rice layered over saffron-infused, tender marinated chicken, caramelized onions, and fresh garden mint.",
                 "price": Decimal("280.00"),
                 "preparation_time": 25,
             },
             {
                 "category": "Rice & Biryani",
                 "name": "Mutton Biryani",
-                "description": "Tender fall-off-the-bone mutton slow-cooked with spiced dum basmati rice and fresh mint.",
+                "description": "Succulent tender cuts of premium mutton marinated overnight in spiced yogurt and layered with aromatic aged basmati rice, slow-cooked in a sealed handi under gentle dum.",
                 "price": Decimal("350.00"),
                 "preparation_time": 30,
             },
             {
                 "category": "Rice & Biryani",
                 "name": "Veg Biryani",
-                "description": "Fragrant garden-fresh vegetables and basmati rice slow-dum cooked with whole ground spices.",
+                "description": "Heirloom basmati rice infused with whole cinnamon, star anise, and saffron, slow-cooked with fresh garden vegetables, mint leaves, and toasted cashew nuts.",
                 "price": Decimal("220.00"),
                 "preparation_time": 20,
             },
@@ -158,28 +158,28 @@ class Command(BaseCommand):
             {
                 "category": "Beverages",
                 "name": "Fresh Lime Soda",
-                "description": "Sparkling chilled lime soda served sweet, salted, or mixed to order.",
+                "description": "Hand-pressed zesty lime juice stirred with chilled sparkling soda, available custom-blended sweet, salted, or mixed to invigorate your senses.",
                 "price": Decimal("80.00"),
                 "preparation_time": 5,
             },
             {
                 "category": "Beverages",
                 "name": "Mango Lassi",
-                "description": "Thick creamy yogurt smoothie blended with luscious Alphonso mango pulp and cardamom.",
+                "description": "Luscious, thick smoothie churned from velvety fresh whole-milk curd, sun-ripened Ratnagiri Alphonso mango pulp, and a delicate pinch of freshly ground cardamom.",
                 "price": Decimal("100.00"),
                 "preparation_time": 5,
             },
             {
                 "category": "Beverages",
                 "name": "Cold Coffee",
-                "description": "Rich chilled espresso blended with velvety full-cream milk and a scoop of vanilla ice cream.",
+                "description": "Artisanal chilled brew crafted from bold South Indian espresso beans blended with creamy whole milk and crowned with a scoop of Madagascar vanilla bean ice cream.",
                 "price": Decimal("120.00"),
                 "preparation_time": 7,
             },
             {
                 "category": "Beverages",
                 "name": "Mineral Water",
-                "description": "Chilled packaged natural mineral water bottle.",
+                "description": "Pure, refreshingly chilled natural mineral spring water, packaged and sealed for pristine clarity.",
                 "price": Decimal("30.00"),
                 "preparation_time": 1,
             },
@@ -188,7 +188,7 @@ class Command(BaseCommand):
             {
                 "category": "Desserts",
                 "name": "Gulab Jamun",
-                "description": "Warm golden milk-solid dumplings soaked in fragrant cardamom saffron syrup.",
+                "description": "Tender, golden-fried milk-solid dumplings gently soaked in a warm, fragrant syrup infused with rose water, green cardamom pods, and delicate saffron strands.",
                 "price": Decimal("110.00"),
                 "preparation_time": 5,
             },
@@ -215,7 +215,11 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS(f"  + Added Menu Item: {item_obj.name} (₹{item_obj.price})"))
             else:
                 items_existing += 1
-                self.stdout.write(f"  = Existing Menu Item: {item_obj.name}")
+                # Keep rich descriptive text updated even if item already exists
+                if item_obj.description != item_data["description"]:
+                    item_obj.description = item_data["description"]
+                    item_obj.save(update_fields=["description"])
+                self.stdout.write(f"  = Verified Menu Item: {item_obj.name}")
 
         # 4. Initial Restaurant Tables
         tables_data = [

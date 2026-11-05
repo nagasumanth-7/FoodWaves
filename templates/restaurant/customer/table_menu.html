@@ -181,16 +181,17 @@
   }
 
   .menu-card {
-    background: rgba(9, 23, 44, 0.75);
+    background: rgba(9, 23, 44, 0.78);
     border: 1px solid var(--border-glass);
     border-radius: var(--radius-lg);
-    padding: 24px;
+    padding: 0;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
     transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease;
     backdrop-filter: blur(12px);
     position: relative;
+    overflow: hidden;
   }
 
   .menu-card:hover {
@@ -202,6 +203,49 @@
   .menu-card.unavailable {
     opacity: 0.65;
     border-color: rgba(239, 68, 68, 0.25);
+  }
+
+  .card-media {
+    position: relative;
+    width: 100%;
+    height: 165px;
+    overflow: hidden;
+    background: rgba(5, 17, 36, 0.95);
+  }
+
+  .card-dish-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+
+  .menu-card:hover .card-dish-img {
+    transform: scale(1.06);
+  }
+
+  .card-cat-badge {
+    position: absolute;
+    top: 10px;
+    left: 12px;
+    font: 700 9px var(--mono);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: #031426;
+    background: linear-gradient(135deg, #7dffef 0%, #4ad3ff 100%);
+    padding: 3px 9px;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    z-index: 2;
+  }
+
+  .card-body {
+    padding: 18px 20px 18px;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    justify-content: space-between;
   }
 
   .dish-top {
@@ -425,27 +469,39 @@
     <div class="menu-grid">
       {% for item in items %}
         <div class="menu-card {% if not item.is_available %}unavailable{% endif %}" id="card-item-{{ item.id }}">
-          <div>
-            <div class="dish-top">
-              <h3 class="dish-title">{{ item.name }}</h3>
-              <span class="dish-price">₹{{ item.price }}</span>
-            </div>
-            <span class="dish-cat">{{ item.category.name }}</span>
-            <p class="dish-desc">{{ item.description|default:"Prepared with farm-fresh ingredients and authentic heritage spices." }}</p>
+          <div class="card-media">
+            <span class="card-cat-badge">{{ item.category.name }}</span>
+            <img 
+              src="{{ item.photo_url }}" 
+              alt="{{ item.name }}" 
+              class="card-dish-img" 
+              loading="lazy" 
+              onerror="this.onerror=null; this.src='https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=600&q=80';"
+            >
           </div>
 
-          <div class="dish-meta">
-            <span class="dish-prep">⏱ ~{{ item.preparation_time }} mins</span>
-
-            {% if item.is_available %}
-              <div class="order-ctrls" id="ctrl-{{ item.id }}">
-                <button class="btn-add-item" onclick="addToCart({{ item.id }}, '{{ item.name|escapejs }}', {{ item.price }})">+ Add to Order</button>
+          <div class="card-body">
+            <div>
+              <div class="dish-top">
+                <h3 class="dish-title">{{ item.name }}</h3>
+                <span class="dish-price">₹{{ item.price }}</span>
               </div>
-            {% else %}
-              <span class="unavail-tag">
-                ✕ {% if item.availability_reason %}{{ item.availability_reason }}{% else %}Unavailable Right Now{% endif %}
-              </span>
-            {% endif %}
+              <p class="dish-desc">{{ item.description|default:"Prepared with farm-fresh ingredients and authentic heritage spices." }}</p>
+            </div>
+
+            <div class="dish-meta">
+              <span class="dish-prep">⏱ ~{{ item.preparation_time }} mins</span>
+
+              {% if item.is_available %}
+                <div class="order-ctrls" id="ctrl-{{ item.id }}">
+                  <button class="btn-add-item" onclick="addToCart({{ item.id }}, '{{ item.name|escapejs }}', {{ item.price }})">+ Add to Order</button>
+                </div>
+              {% else %}
+                <span class="unavail-tag">
+                  ✕ Currently Unavailable
+                </span>
+              {% endif %}
+            </div>
           </div>
         </div>
       {% empty %}

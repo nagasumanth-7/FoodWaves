@@ -28,6 +28,7 @@ urlpatterns = [
     path("manager/menu/add/", views.manager_menu_add, name="manager_menu_add"),
     path("manager/menu/<int:item_id>/edit/", views.manager_menu_edit, name="manager_menu_edit"),
     path("manager/menu/<int:item_id>/delete/", views.manager_menu_delete, name="manager_menu_delete"),
+    path("manager/menu/<int:item_id>/toggle/", views.manager_menu_toggle_availability, name="manager_menu_toggle_availability"),
     path("manager/categories/", views.manager_categories_list, name="manager_categories_list"),
     path("manager/categories/add/", views.manager_category_add, name="manager_category_add"),
     path("manager/categories/<int:category_id>/edit/", views.manager_category_edit, name="manager_category_edit"),
