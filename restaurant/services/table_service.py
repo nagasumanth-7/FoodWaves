@@ -1,9 +1,54 @@
+from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Sum, F, DecimalField
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from ..models import RestaurantTable, TableSession, Reservation, Bill
+from ..models import RestaurantTable, TableSession, Reservation, Bill, OrderItem
+
+
+def attach_active_sessions_to_tables(tables):
+    """
+    Batch-loads active/bill-pending sessions and their running subtotals for a list of tables
+    in at most 2 SQL queries, eliminating N+1 queries on Waiter/Cashier/Manager dashboards.
+    """
+    tables_list = list(tables)
+    if not tables_list:
+        return tables_list
+
+    table_ids = [t.id for t in tables_list]
+    sessions = list(
+        TableSession.objects.filter(table_id__in=table_ids, status__in=["ACTIVE", "BILL_PENDING"]).order_by("-opened_at")
+    )
+
+    sessions_by_table = {}
+    session_ids = []
+    for s in sessions:
+        s._prefetched_subtotal = Decimal("0.00")
+        sessions_by_table.setdefault(s.table_id, []).append(s)
+        session_ids.append(s.id)
+
+    if session_ids:
+        totals = (
+            OrderItem.objects.filter(order__session_id__in=session_ids)
+            .exclude(order__status="CANCELLED")
+            .exclude(status="CANCELLED")
+            .values("order__session_id")
+            .annotate(
+                total=Sum(
+                    F("quantity") * F("unit_price"),
+                    output_field=DecimalField(max_digits=12, decimal_places=2),
+                )
+            )
+        )
+        totals_map = {row["order__session_id"]: (row["total"] or Decimal("0.00")) for row in totals}
+        for s in sessions:
+            s._prefetched_subtotal = totals_map.get(s.id, Decimal("0.00"))
+
+    for t in tables_list:
+        t._prefetched_active_sessions = sessions_by_table.get(t.id, [])
+
+    return tables_list
 
 
 def get_all_tables(status_filter=None, area_filter=None):
@@ -30,8 +75,8 @@ def get_table_by_qr_token(qr_token):
 
 
 def get_active_session_for_table(table_id):
-    """Returns the currently active TableSession for a table, if one exists."""
-    return TableSession.objects.filter(table_id=table_id, status="ACTIVE").first()
+    """Returns the currently active or bill-pending TableSession for a table, if one exists."""
+    return TableSession.objects.filter(table_id=table_id, status__in=["ACTIVE", "BILL_PENDING"]).first()
 
 
 def get_or_create_active_session(table, customer=None, guest_name=None, guest_count=None, waiter_user=None, reservation=None):
@@ -41,6 +86,15 @@ def get_or_create_active_session(table, customer=None, guest_name=None, guest_co
     when multiple customers scan the same table QR code simultaneously.
     Prevents opening new sessions if the previous session has an unpaid bill.
     """
+    # Fast-path read: avoid row-locking the table when an active session already exists
+    if reservation is None:
+        existing_session = TableSession.objects.filter(table=table, status="ACTIVE").first()
+        if existing_session:
+            if customer and customer.is_authenticated and not existing_session.customer_id:
+                existing_session.customer = customer
+                existing_session.save(update_fields=["customer"])
+            return existing_session
+
     with transaction.atomic():
         # Lock table record during session check/creation
         locked_table = RestaurantTable.objects.select_for_update().get(pk=table.pk)

@@ -302,15 +302,49 @@
       if (fileInput && previewImg) {
         fileInput.addEventListener("change", (e) => {
           const file = e.target.files && e.target.files[0];
-          if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-              previewImg.src = event.target.result;
-              if (previewTitle) previewTitle.textContent = "New Photo Selected: " + file.name;
-              if (previewSubtext) previewSubtext.textContent = (file.size / 1024).toFixed(1) + " KB • Ready to save on submission.";
-            };
-            reader.readAsDataURL(file);
-          }
+          if (!file) return;
+
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            previewImg.src = event.target.result;
+            if (previewTitle) previewTitle.textContent = "New Photo Selected: " + file.name;
+            if (previewSubtext) previewSubtext.textContent = (file.size / 1024).toFixed(1) + " KB • Ready to save on submission.";
+
+            // Optimize large photos client-side so uploads stay fast and under serverless payload limits
+            if (file.size > 900 * 1024 && file.type.startsWith("image/") && typeof DataTransfer !== "undefined") {
+              const imgEl = new Image();
+              imgEl.onload = () => {
+                const maxDim = 1200;
+                let w = imgEl.naturalWidth || imgEl.width;
+                let h = imgEl.naturalHeight || imgEl.height;
+                if (w > maxDim || h > maxDim) {
+                  const scale = maxDim / Math.max(w, h);
+                  w = Math.round(w * scale);
+                  h = Math.round(h * scale);
+                }
+                const canvas = document.createElement("canvas");
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext("2d");
+                if (!ctx) return;
+                ctx.drawImage(imgEl, 0, 0, w, h);
+                canvas.toBlob((blob) => {
+                  if (blob && blob.size < file.size) {
+                    const baseName = file.name.replace(/\.[^.]+$/, "");
+                    const compressed = new File([blob], baseName + ".jpg", { type: "image/jpeg" });
+                    const dt = new DataTransfer();
+                    dt.items.add(compressed);
+                    fileInput.files = dt.files;
+                    if (previewSubtext) {
+                      previewSubtext.textContent = (compressed.size / 1024).toFixed(1) + " KB (optimized) • Ready to save.";
+                    }
+                  }
+                }, "image/jpeg", 0.84);
+              };
+              imgEl.src = event.target.result;
+            }
+          };
+          reader.readAsDataURL(file);
         });
       }
 

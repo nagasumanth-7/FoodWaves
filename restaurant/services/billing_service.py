@@ -2,9 +2,10 @@ from datetime import timedelta
 from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import Sum, Count
+from django.db.models import Sum, Count, Q, DecimalField
+from django.db.models.functions import Coalesce
 from django.utils import timezone
-from ..models import Bill, Payment, TableSession, RestaurantTable
+from ..models import Bill, Payment, TableSession, RestaurantTable, OrderItem
 
 
 GST_RATE = Decimal("0.05")  # 5% Restaurant GST (2.5% CGST + 2.5% SGST)
@@ -176,22 +177,32 @@ def create_direct_counter_bill(
     if not items_data:
         raise ValidationError("Cannot create a bill with no items selected.")
 
-    from ..models import MenuItem, Order, OrderItem
+    from ..models import MenuItem, Order
+
+    parsed_entries = []
+    item_ids = set()
+    for entry in items_data:
+        item_id = entry.get("item_id")
+        qty = int(entry.get("quantity", 1))
+        notes = (entry.get("notes") or "").strip()
+        if qty <= 0:
+            continue
+        try:
+            int_id = int(item_id)
+        except (TypeError, ValueError):
+            raise ValidationError(f"Menu item #{item_id} does not exist.")
+        item_ids.add(int_id)
+        parsed_entries.append((int_id, qty, notes))
 
     with transaction.atomic():
-        # 1. Server-side validation of items & prices
+        # 1. Batch fetch & validate items in 1 query
+        items_map = MenuItem.objects.in_bulk(list(item_ids)) if item_ids else {}
         validated_items = []
         subtotal = Decimal("0.00")
-        for entry in items_data:
-            item_id = entry.get("item_id")
-            qty = int(entry.get("quantity", 1))
-            notes = entry.get("notes", "").strip()
-            if qty <= 0:
-                continue
-            try:
-                item = MenuItem.objects.get(pk=item_id)
-            except MenuItem.DoesNotExist:
-                raise ValidationError(f"Menu item #{item_id} does not exist.")
+        for int_id, qty, notes in parsed_entries:
+            item = items_map.get(int_id)
+            if not item:
+                raise ValidationError(f"Menu item #{int_id} does not exist.")
 
             # Cashier direct billing allows active items even if kitchen marked is_available=False
             # (e.g. cashier billing counter walk-ins or already-served items)
@@ -227,7 +238,7 @@ def create_direct_counter_bill(
             status="UNPAID",
         )
 
-        # 4. Create Order record linked directly to Bill
+        # 4. Create Order record linked directly to Bill & bulk-insert OrderItems
         order = Order.objects.create(
             session=None,
             bill=bill,
@@ -238,8 +249,8 @@ def create_direct_counter_bill(
         )
 
         now = timezone.now()
-        for menu_item, qty, unit_price, notes in validated_items:
-            OrderItem.objects.create(
+        OrderItem.objects.bulk_create([
+            OrderItem(
                 order=order,
                 menu_item=menu_item,
                 quantity=qty,
@@ -250,6 +261,8 @@ def create_direct_counter_bill(
                 ready_at=now,
                 served_at=now,
             )
+            for menu_item, qty, unit_price, notes in validated_items
+        ])
 
         # 5. If immediate settlement requested (e.g. counter walk-in pays right away)
         if settle_immediately:
@@ -290,22 +303,59 @@ def get_unpaid_bills():
     )
 
 
-def get_sales_report_summary(start_date=None, end_date=None, period="today"):
+def attach_bill_item_counts(bills):
     """
-    Financial Sales Report calculation supporting flexible periods and date constraints:
-    Periods supported:
-      - 'today': metrics for today
-      - 'yesterday': metrics for yesterday
-      - 'week': last 7 days (today - 6 days through today)
-      - 'month': last 30 days (today - 29 days through today)
-      - 'custom': custom range bounded by start_date and end_date
-    Validates date constraints (start_date <= end_date, safe fallbacks).
-    Aggregates:
-      - Total revenue collected
-      - Payment methods breakdown (Cash, UPI, Card)
-      - Food subtotal, taxes (GST), discounts, tips
-      - Transaction count
-      - Itemized payment ledger
+    Batch-loads active OrderItem counts onto a list of Bill instances in at most 2 queries,
+    preventing N+1 lookups from bill.total_items_count in dashboard tables.
+    """
+    bills_list = list(bills)
+    if not bills_list:
+        return bills_list
+
+    session_ids = [b.session_id for b in bills_list if b.session_id]
+    direct_bill_ids = [b.id for b in bills_list if not b.session_id]
+
+    session_counts = {}
+    if session_ids:
+        rows = (
+            OrderItem.objects.filter(order__session_id__in=session_ids)
+            .exclude(order__status="CANCELLED")
+            .exclude(status="CANCELLED")
+            .values("order__session_id")
+            .annotate(cnt=Count("id"))
+        )
+        session_counts = {r["order__session_id"]: r["cnt"] for r in rows}
+
+    direct_counts = {}
+    if direct_bill_ids:
+        rows = (
+            OrderItem.objects.filter(order__bill_id__in=direct_bill_ids)
+            .exclude(order__status="CANCELLED")
+            .exclude(status="CANCELLED")
+            .values("order__bill_id")
+            .annotate(cnt=Count("id"))
+        )
+        direct_counts = {r["order__bill_id"]: r["cnt"] for r in rows}
+
+    for b in bills_list:
+        if b.session_id:
+            b._prefetched_items_count = session_counts.get(b.session_id, 0)
+        else:
+            b._prefetched_items_count = direct_counts.get(b.id, 0)
+
+    return bills_list
+
+
+def get_sales_report_summary(
+    start_date=None,
+    end_date=None,
+    period="today",
+    include_bill_breakdown=True,
+    include_payments=True,
+):
+    """
+    Financial Sales Report calculation supporting flexible periods and date constraints.
+    Uses single-pass conditional aggregates to minimize database round-trips.
     """
     today = timezone.localdate()
 
@@ -332,7 +382,6 @@ def get_sales_report_summary(start_date=None, end_date=None, period="today"):
             start_date = today
         if end_date is None:
             end_date = start_date or today
-        # Date constraint enforcement: start_date cannot exceed end_date
         if start_date > end_date:
             start_date, end_date = end_date, start_date
         if start_date == end_date:
@@ -351,30 +400,49 @@ def get_sales_report_summary(start_date=None, end_date=None, period="today"):
         created_at__date__lte=end_date,
     )
 
-    total_revenue = payments_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
-    total_transactions = payments_qs.count()
-
-    # Method breakdowns
-    cash_total = payments_qs.filter(payment_method="CASH").aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
-    upi_total = payments_qs.filter(payment_method="UPI").aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
-    card_total = payments_qs.filter(payment_method="CARD").aggregate(total=Sum("amount"))["total"] or Decimal("0.00")
-
-    # Linked settled bills aggregates (subtotal, tax, tip)
-    paid_bills_qs = Bill.objects.filter(
-        pk__in=payments_qs.values_list("bill_id", flat=True)
+    zero = Decimal("0.00")
+    dec_field = DecimalField(max_digits=12, decimal_places=2)
+    payment_stats = payments_qs.aggregate(
+        total_revenue=Coalesce(Sum("amount", output_field=dec_field), zero, output_field=dec_field),
+        total_transactions=Count("id"),
+        cash_total=Coalesce(Sum("amount", filter=Q(payment_method="CASH"), output_field=dec_field), zero, output_field=dec_field),
+        upi_total=Coalesce(Sum("amount", filter=Q(payment_method="UPI"), output_field=dec_field), zero, output_field=dec_field),
+        card_total=Coalesce(Sum("amount", filter=Q(payment_method="CARD"), output_field=dec_field), zero, output_field=dec_field),
     )
-    subtotal_sum = paid_bills_qs.aggregate(total=Sum("subtotal"))["total"] or Decimal("0.00")
-    discount_sum = Decimal("0.00")
-    tax_sum = paid_bills_qs.aggregate(total=Sum("tax"))["total"] or Decimal("0.00")
-    tip_sum = paid_bills_qs.aggregate(total=Sum("tip"))["total"] or Decimal("0.00")
 
-    payments_list = (
-        payments_qs.select_related("bill__session__table", "bill", "processed_by")
-        .order_by("-created_at")[:100]
-    )
+    total_revenue = payment_stats["total_revenue"] or zero
+    total_transactions = payment_stats["total_transactions"] or 0
+    cash_total = payment_stats["cash_total"] or zero
+    upi_total = payment_stats["upi_total"] or zero
+    card_total = payment_stats["card_total"] or zero
+
+    subtotal_sum = zero
+    discount_sum = zero
+    tax_sum = zero
+    tip_sum = zero
+    if include_bill_breakdown and total_transactions > 0:
+        paid_bills_qs = Bill.objects.filter(
+            pk__in=payments_qs.values_list("bill_id", flat=True)
+        )
+        bill_stats = paid_bills_qs.aggregate(
+            subtotal_sum=Coalesce(Sum("subtotal", output_field=dec_field), zero, output_field=dec_field),
+            tax_sum=Coalesce(Sum("tax", output_field=dec_field), zero, output_field=dec_field),
+            tip_sum=Coalesce(Sum("tip", output_field=dec_field), zero, output_field=dec_field),
+        )
+        subtotal_sum = bill_stats["subtotal_sum"] or zero
+        tax_sum = bill_stats["tax_sum"] or zero
+        tip_sum = bill_stats["tip_sum"] or zero
+
+    if include_payments and total_transactions > 0:
+        payments_list = list(
+            payments_qs.select_related("bill__session__table", "bill", "processed_by")
+            .order_by("-created_at")[:100]
+        )
+    else:
+        payments_list = []
 
     return {
-        "date": start_date,  # backwards compatibility for single-day consumers
+        "date": start_date,
         "start_date": start_date,
         "end_date": end_date,
         "period": period,
@@ -393,11 +461,17 @@ def get_sales_report_summary(start_date=None, end_date=None, period="today"):
     }
 
 
-def get_daily_cashier_summary(target_date=None):
+def get_daily_cashier_summary(target_date=None, include_bill_breakdown=True, include_payments=True):
     """
     Backwards-compatible wrapper around get_sales_report_summary for a single target date.
     """
     if target_date is None:
         target_date = timezone.localdate()
-    return get_sales_report_summary(start_date=target_date, end_date=target_date, period="custom" if target_date != timezone.localdate() else "today")
+    return get_sales_report_summary(
+        start_date=target_date,
+        end_date=target_date,
+        period="custom" if target_date != timezone.localdate() else "today",
+        include_bill_breakdown=include_bill_breakdown,
+        include_payments=include_payments,
+    )
 

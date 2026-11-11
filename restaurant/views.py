@@ -1,8 +1,11 @@
 import io
 import json
 import logging
+import mimetypes
+import posixpath
 import qrcode
 from decimal import Decimal
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 from django.shortcuts import render, redirect, get_object_or_404
@@ -16,7 +19,8 @@ from django.conf import settings
 from django.contrib import messages
 from django.urls import reverse
 from django.utils import timezone
-from django.http import JsonResponse, HttpResponseForbidden, HttpResponse
+from django.http import JsonResponse, HttpResponseForbidden, HttpResponse, FileResponse, Http404
+from django.utils._os import safe_join
 
 from django.contrib.auth.models import Group
 from django.db.models import Q, Count
@@ -32,6 +36,7 @@ from .models import (
     OrderItem,
     Bill,
     Payment,
+    StoredMedia,
 )
 from .forms import (
     SignUpForm,
@@ -56,6 +61,8 @@ from .supabase_auth import (
     supabase_verify_token,
 )
 from .permissions import (
+    get_user_role_names,
+    invalidate_user_role_cache,
     manager_required,
     chef_required,
     waiter_required,
@@ -79,6 +86,7 @@ from .services.order_service import (
     get_pending_serves_for_waiter,
 )
 from .services.table_service import (
+    attach_active_sessions_to_tables,
     get_all_tables,
     get_table_by_id,
     get_table_by_qr_token,
@@ -93,6 +101,7 @@ from .services.table_service import (
     seat_reservation,
 )
 from .services.billing_service import (
+    attach_bill_item_counts,
     calculate_and_generate_bill,
     request_bill_from_customer,
     process_bill_payment,
@@ -577,27 +586,29 @@ def get_user_home_url(user, next_url=None):
     if not user.is_authenticated:
         return reverse("restaurant:home")
 
-    if user.is_superuser or user.groups.filter(name="ADMIN").exists():
+    roles = get_user_role_names(user)
+
+    if user.is_superuser or "ADMIN" in roles:
         if next_url and next_url.startswith("/") and not next_url.startswith("/login"):
             return next_url
         return reverse("restaurant:manager_dashboard")
 
-    if user.groups.filter(name="WAITER").exists():
+    if "WAITER" in roles:
         if next_url and next_url.startswith("/waiter/"):
             return next_url
         return reverse("restaurant:waiter_dashboard")
 
-    if user.groups.filter(name="CHEF").exists():
+    if "CHEF" in roles:
         if next_url and next_url.startswith("/chef/"):
             return next_url
         return reverse("restaurant:chef_dashboard")
 
-    if user.groups.filter(name="CASHIER").exists():
+    if "CASHIER" in roles:
         if next_url and next_url.startswith("/cashier/"):
             return next_url
         return reverse("restaurant:cashier_dashboard")
 
-    if user.groups.filter(name="MANAGER").exists():
+    if "MANAGER" in roles:
         if next_url and next_url.startswith("/manager/"):
             return next_url
         return reverse("restaurant:manager_dashboard")
@@ -686,32 +697,37 @@ def login_page(request):
             remember_me = form.cleaned_data.get("remember_me", True)
 
             try:
-                # Direct authentication for Staff, Managers, Chefs, Waiters, Cashiers, and Superusers
                 local_user = (
-                    User.objects.filter(email__iexact=email).first()
-                    or User.objects.filter(username__iexact=email).first()
+                    User.objects.select_related("profile")
+                    .prefetch_related("groups")
+                    .filter(Q(email__iexact=email) | Q(username__iexact=email))
+                    .order_by("id")
+                    .first()
                 )
             except Exception as db_err:
-                logger.error(f"Database error during staff lookup: {db_err}")
+                logger.error(f"Database error during user lookup: {db_err}")
                 local_user = None
 
-            if (
-                local_user
-                and local_user.is_active
-                and local_user.check_password(password)
-                and (
+            if local_user and local_user.is_active and local_user.has_usable_password() and local_user.check_password(password):
+                role_names = get_user_role_names(local_user)
+                is_staff_account = (
                     local_user.is_staff
                     or local_user.is_superuser
-                    or local_user.groups.filter(name__in=["MANAGER", "CHEF", "WAITER", "CASHIER", "ADMIN"]).exists()
+                    or bool(role_names.intersection({"MANAGER", "CHEF", "WAITER", "CASHIER", "ADMIN"}))
                 )
-            ):
-                login(request, local_user, backend="django.contrib.auth.backends.ModelBackend")
-                if not remember_me:
-                    request.session.set_expiry(0)
-                messages.success(request, f"Welcome back, {local_user.first_name or local_user.username}!")
-                return redirect(get_user_home_url(local_user, next_url=next_url))
+                try:
+                    local_profile = local_user.profile
+                except UserProfile.DoesNotExist:
+                    local_profile = None
 
-            # Supabase Auth Authentication for Customer Accounts
+                if is_staff_account or (local_profile and local_profile.is_email_verified):
+                    login(request, local_user, backend="django.contrib.auth.backends.ModelBackend")
+                    if not remember_me:
+                        request.session.set_expiry(0)
+                    messages.success(request, f"Welcome back, {local_user.first_name or local_user.username or local_user.email}!")
+                    return redirect(get_user_home_url(local_user, next_url=next_url))
+
+            # Supabase Auth Authentication for first-time / unverified / synced accounts
             success, data_or_code, err_msg = supabase_sign_in(email, password)
 
             if not success:
@@ -740,21 +756,43 @@ def login_page(request):
             phone = user_meta.get("phone_number") or ""
 
             try:
-                django_user, created = User.objects.get_or_create(
-                    username=email,
-                    defaults={"email": email, "first_name": name, "is_active": True},
-                )
-                django_user.is_active = True
+                if local_user is not None:
+                    django_user = local_user
+                    created = False
+                else:
+                    django_user, created = User.objects.get_or_create(
+                        username=email,
+                        defaults={"email": email, "first_name": name, "is_active": True},
+                    )
+
+                user_changed = created
+                if not django_user.is_active:
+                    django_user.is_active = True
+                    user_changed = True
                 if name and not django_user.first_name:
                     django_user.first_name = name
-                django_user.set_password(password)
-                django_user.save()
+                    user_changed = True
+                if created or not django_user.has_usable_password() or not django_user.check_password(password):
+                    django_user.set_password(password)
+                    user_changed = True
+                if user_changed and not created:
+                    django_user.save()
+                elif created:
+                    django_user.save()
 
-                profile, _ = UserProfile.objects.get_or_create(user=django_user)
-                profile.is_email_verified = True
+                profile, prof_created = UserProfile.objects.get_or_create(
+                    user=django_user,
+                    defaults={"is_email_verified": True, "phone_number": phone},
+                )
+                prof_changed = False
+                if not profile.is_email_verified:
+                    profile.is_email_verified = True
+                    prof_changed = True
                 if phone and not profile.phone_number:
                     profile.phone_number = phone
-                profile.save()
+                    prof_changed = True
+                if prof_changed and not prof_created:
+                    profile.save(update_fields=["is_email_verified", "phone_number"])
             except Exception as db_err:
                 logger.error(f"Error persisting user to database: {db_err}")
                 messages.error(request, "Unable to synchronize user session with database. Please try again.")
@@ -844,10 +882,14 @@ def reservation(request):
 @login_required(login_url="restaurant:login")
 def booking_history(request):
     today = timezone.localdate()
-    user_reservations = Reservation.objects.filter(user=request.user)
+    all_bookings = list(
+        Reservation.objects.filter(user=request.user)
+        .select_related("table")
+        .order_by("date", "time")
+    )
 
-    upcoming_bookings = user_reservations.filter(date__gte=today).order_by("date", "time")
-    past_bookings = user_reservations.filter(date__lt=today).order_by("-date", "-time")
+    upcoming_bookings = [b for b in all_bookings if b.date >= today]
+    past_bookings = sorted([b for b in all_bookings if b.date < today], key=lambda b: (b.date, b.time), reverse=True)
 
     return render(
         request,
@@ -855,7 +897,7 @@ def booking_history(request):
         {
             "upcoming_bookings": upcoming_bookings,
             "past_bookings": past_bookings,
-            "total_count": user_reservations.count(),
+            "total_count": len(all_bookings),
         },
     )
 
@@ -893,24 +935,25 @@ def manager_dashboard(request):
     """
     Manager overview portal (Section 8).
     """
-    total_items = MenuItem.objects.count()
-    active_items = MenuItem.objects.filter(is_active=True).count()
-    available_items = MenuItem.objects.filter(is_active=True, is_available=True).count()
-    unavailable_items = MenuItem.objects.filter(is_active=True, is_available=False).count()
-    archived_items = MenuItem.objects.filter(is_active=False).count()
+    counts = MenuItem.objects.aggregate(
+        total_items=Count("id"),
+        active_items=Count("id", filter=Q(is_active=True)),
+        available_items=Count("id", filter=Q(is_active=True, is_available=True)),
+        unavailable_items=Count("id", filter=Q(is_active=True, is_available=False)),
+        archived_items=Count("id", filter=Q(is_active=False)),
+    )
     total_categories = MenuCategory.objects.count()
-
     recent_items = MenuItem.objects.select_related("category").order_by("-updated_at")[:6]
 
     return render(
         request,
         "restaurant/manager/dashboard.html",
         {
-            "total_items": total_items,
-            "active_items": active_items,
-            "available_items": available_items,
-            "unavailable_items": unavailable_items,
-            "archived_items": archived_items,
+            "total_items": counts["total_items"] or 0,
+            "active_items": counts["active_items"] or 0,
+            "available_items": counts["available_items"] or 0,
+            "unavailable_items": counts["unavailable_items"] or 0,
+            "archived_items": counts["archived_items"] or 0,
             "total_categories": total_categories,
             "recent_items": recent_items,
         },
@@ -927,28 +970,41 @@ def manager_menu_list(request):
     status_filter = request.GET.get("status")
     search_query = request.GET.get("q", "")
 
-    items = get_all_menu_items_for_manager(
-        category_id=category_id,
-        status_filter=status_filter,
-        search_query=search_query,
+    items = list(
+        get_all_menu_items_for_manager(
+            category_id=category_id,
+            status_filter=status_filter,
+            search_query=search_query,
+        )
     )
     categories = MenuCategory.objects.all().order_by("name")
 
-    base_items = MenuItem.objects.all()
-    if category_id and category_id.isdigit():
-        base_items = base_items.filter(category_id=category_id)
-    if search_query:
-        query = search_query.strip()
-        base_items = base_items.filter(
-            Q(name__icontains=query) |
-            Q(description__icontains=query) |
-            Q(category__name__icontains=query)
+    if not status_filter:
+        available_count = sum(1 for i in items if i.is_active and i.is_available)
+        unavailable_count = sum(1 for i in items if i.is_active and not i.is_available)
+        archived_count = sum(1 for i in items if not i.is_active)
+        total_count = len(items)
+    else:
+        base_items = MenuItem.objects.all()
+        if category_id and category_id.isdigit():
+            base_items = base_items.filter(category_id=category_id)
+        if search_query:
+            query = search_query.strip()
+            base_items = base_items.filter(
+                Q(name__icontains=query) |
+                Q(description__icontains=query) |
+                Q(category__name__icontains=query)
+            )
+        counts = base_items.aggregate(
+            total_count=Count("id"),
+            available_count=Count("id", filter=Q(is_active=True, is_available=True)),
+            unavailable_count=Count("id", filter=Q(is_active=True, is_available=False)),
+            archived_count=Count("id", filter=Q(is_active=False)),
         )
-
-    available_count = base_items.filter(is_active=True, is_available=True).count()
-    unavailable_count = base_items.filter(is_active=True, is_available=False).count()
-    archived_count = base_items.filter(is_active=False).count()
-    total_count = base_items.count()
+        available_count = counts["available_count"] or 0
+        unavailable_count = counts["unavailable_count"] or 0
+        archived_count = counts["archived_count"] or 0
+        total_count = counts["total_count"] or 0
 
     return render(
         request,
@@ -1002,12 +1058,12 @@ def manager_menu_edit(request, item_id):
     """
     Manager Edit Menu Item view (Section 10).
     """
-    item = get_object_or_404(MenuItem, pk=item_id)
+    item = get_object_or_404(MenuItem.objects.select_related("category"), pk=item_id)
 
     if request.method == "POST":
+        was_available = item.is_available
         form = MenuItemForm(request.POST, request.FILES, instance=item)
         if form.is_valid():
-            was_available = item.is_available
             updated_item = form.save(commit=False)
             updated_item.is_active = True
 
@@ -1108,30 +1164,44 @@ def chef_dashboard(request):
     - Dish preparation action controls (Completed / Not Available / Cooking)
     - Recipe & availability metrics
     """
-    active_items = MenuItem.objects.filter(is_active=True)
-    available_count = active_items.filter(is_available=True).count()
-    unavailable_count = active_items.filter(is_available=False).count()
-    unavailable_items = active_items.filter(is_available=False).select_related("category")
+    item_counts = MenuItem.objects.filter(is_active=True).aggregate(
+        total_active=Count("id"),
+        available_count=Count("id", filter=Q(is_available=True)),
+        unavailable_count=Count("id", filter=Q(is_available=False)),
+    )
+    unavailable_items = MenuItem.objects.filter(is_active=True, is_available=False).select_related("category")
 
     active_orders = get_kitchen_active_orders()
-    active_items_queue = OrderItem.objects.filter(
-        order__in=active_orders,
-        status__in=["PENDING", "PREPARING"]
-    ).select_related("order__session__table", "order__bill", "order__placed_by", "menu_item").order_by("created_at")
-
-    pending_items_count = active_items_queue.filter(status="PENDING").count()
-    preparing_items_count = active_items_queue.filter(status="PREPARING").count()
-    ready_items_count = OrderItem.objects.filter(order__in=active_orders, status="READY").count()
+    active_order_ids = list(active_orders.values_list("id", flat=True))
+    if active_order_ids:
+        queue_and_ready = list(
+            OrderItem.objects.filter(
+                order_id__in=active_order_ids,
+                status__in=["PENDING", "PREPARING", "READY"],
+            )
+            .select_related("order__session__table", "order__bill", "order__placed_by", "menu_item")
+            .order_by("created_at")
+        )
+        active_items_queue = [it for it in queue_and_ready if it.status in ("PENDING", "PREPARING")]
+        pending_items_count = sum(1 for it in active_items_queue if it.status == "PENDING")
+        preparing_items_count = len(active_items_queue) - pending_items_count
+        ready_items_count = len(queue_and_ready) - len(active_items_queue)
+    else:
+        active_items_queue = []
+        pending_items_count = 0
+        preparing_items_count = 0
+        ready_items_count = 0
 
     return render(
         request,
         "restaurant/chef/dashboard.html",
         {
-            "total_active": active_items.count(),
-            "available_count": available_count,
-            "unavailable_count": unavailable_count,
+            "total_active": item_counts["total_active"] or 0,
+            "available_count": item_counts["available_count"] or 0,
+            "unavailable_count": item_counts["unavailable_count"] or 0,
             "unavailable_items": unavailable_items,
             "active_orders": active_orders,
+            "active_orders_count": len(active_order_ids),
             "active_items_queue": active_items_queue,
             "pending_items_count": pending_items_count,
             "preparing_items_count": preparing_items_count,
@@ -1240,23 +1310,28 @@ def waiter_dashboard(request):
     status_filter = request.GET.get("status", "ALL")
     area_filter = request.GET.get("area", "ALL")
 
-    tables = get_all_tables(status_filter=status_filter, area_filter=area_filter)
-    all_tables = get_all_tables()
+    all_tables = list(get_all_tables())
+    available_count = sum(1 for t in all_tables if t.status == "AVAILABLE")
+    occupied_count = sum(1 for t in all_tables if t.status == "OCCUPIED")
+    bill_pending_count = sum(1 for t in all_tables if t.status == "BILL_PENDING")
+    reserved_count = sum(1 for t in all_tables if t.status == "RESERVED")
+    available_tables = [t for t in all_tables if t.status in ("AVAILABLE", "RESERVED")]
 
-    available_count = all_tables.filter(status="AVAILABLE").count()
-    occupied_count = all_tables.filter(status="OCCUPIED").count()
-    bill_pending_count = all_tables.filter(status="BILL_PENDING").count()
-    reserved_count = all_tables.filter(status="RESERVED").count()
+    tables = [
+        t for t in all_tables
+        if (not status_filter or status_filter == "ALL" or t.status == status_filter)
+        and (not area_filter or area_filter == "ALL" or t.floor_area == area_filter)
+    ]
+    attach_active_sessions_to_tables(tables)
 
-    pending_serves = get_pending_serves_for_waiter()
+    pending_serves = list(get_pending_serves_for_waiter())
 
     # Reservations for today
     today = timezone.localdate()
-    today_reservations = get_reservations_for_waiter(date="TODAY")
-    today_reservations_count = today_reservations.count()
-    unassigned_today_count = today_reservations.filter(table__isnull=True).count()
-    confirmed_today_count = today_reservations.filter(status="CONFIRMED").count()
-    available_tables = all_tables.filter(status__in=["AVAILABLE", "RESERVED"])
+    today_reservations = list(get_reservations_for_waiter(date="TODAY"))
+    today_reservations_count = len(today_reservations)
+    unassigned_today_count = sum(1 for r in today_reservations if r.table_id is None)
+    confirmed_today_count = sum(1 for r in today_reservations if r.status == "CONFIRMED")
 
     return render(
         request,
@@ -1296,20 +1371,27 @@ def waiter_reservations(request):
     assignment_filter = request.GET.get("assignment", "ALL")
     search_query = request.GET.get("q", "")
 
-    reservations = get_reservations_for_waiter(
-        date=date_filter,
-        status=status_filter,
-        search_query=search_query,
-        assignment=assignment_filter,
+    reservations = list(
+        get_reservations_for_waiter(
+            date=date_filter,
+            status=status_filter,
+            search_query=search_query,
+            assignment=assignment_filter,
+        )
     )
-    all_tables = get_all_tables()
-    available_tables = all_tables.filter(status__in=["AVAILABLE", "RESERVED"])
+    available_tables = list(get_all_tables().filter(status__in=["AVAILABLE", "RESERVED"]))
 
     today = timezone.localdate()
-    today_count = Reservation.objects.filter(date=today).count()
-    upcoming_count = Reservation.objects.filter(date__gte=today).count()
-    unassigned_today_count = Reservation.objects.filter(date=today, table__isnull=True).count()
-    confirmed_today_count = Reservation.objects.filter(date=today, status="CONFIRMED").count()
+    res_counts = Reservation.objects.filter(date__gte=today).aggregate(
+        today_count=Count("id", filter=Q(date=today)),
+        upcoming_count=Count("id"),
+        unassigned_today_count=Count("id", filter=Q(date=today, table__isnull=True)),
+        confirmed_today_count=Count("id", filter=Q(date=today, status="CONFIRMED")),
+    )
+    today_count = res_counts["today_count"] or 0
+    upcoming_count = res_counts["upcoming_count"] or 0
+    unassigned_today_count = res_counts["unassigned_today_count"] or 0
+    confirmed_today_count = res_counts["confirmed_today_count"] or 0
 
     return render(
         request,
@@ -1583,9 +1665,11 @@ def cashier_dashboard(request):
     - Lists unpaid bills and tables waiting for settlement
     - Quick revenue metrics and payment methods overview
     """
-    unpaid_bills = get_unpaid_bills()
-    occupied_tables = RestaurantTable.objects.filter(is_active=True, status__in=["OCCUPIED", "BILL_PENDING"]).order_by("table_number")
-    summary = get_daily_cashier_summary()
+    unpaid_bills = attach_bill_item_counts(get_unpaid_bills())
+    occupied_tables = attach_active_sessions_to_tables(
+        RestaurantTable.objects.filter(is_active=True, status__in=["OCCUPIED", "BILL_PENDING"]).order_by("table_number")
+    )
+    summary = get_daily_cashier_summary(include_bill_breakdown=False, include_payments=False)
 
     return render(
         request,
@@ -1786,7 +1870,12 @@ def cashier_settle_bill(request, bill_id):
                     processed_by=request.user,
                 )
                 if session:
-                    messages.success(request, f"Payment of ₹{payment.amount} settled via {payment.get_payment_method_display()}! Table {session.table.table_number} is now Available.")
+                    table = session.table
+                    table.status = "AVAILABLE"
+                    table.save(update_fields=["status"])
+                    session.status = "CLOSED"
+                    session.save(update_fields=["status"])
+                    messages.success(request, f"Payment of ₹{payment.amount} settled via {payment.get_payment_method_display()}! Table {table.table_number} is now OPEN and available to seat guests.")
                 else:
                     messages.success(request, f"Payment of ₹{payment.amount} settled via {payment.get_payment_method_display()} for {bill.display_title}!")
                 return redirect("restaurant:cashier_receipt", bill_id=bill.id)
@@ -1815,19 +1904,56 @@ def cashier_settle_bill(request, bill_id):
 @cashier_required
 def cashier_generate_bill(request, table_id):
     """
-    Generates a bill for an active table session and directs to checkout.
+    Generates a bill for an active table session and immediately settles it,
+    freeing the table back to AVAILABLE (open, not occupied) and redirecting to receipt.
+    If the table has no orders, cleanly closes the session and frees the table.
     """
     table = get_table_by_id(table_id)
     session = get_active_session_for_table(table.id)
+
     if not session:
-        messages.error(request, f"No active session on Table {table.table_number}.")
+        table.status = "AVAILABLE"
+        table.save(update_fields=["status"])
+        messages.success(request, f"Table {table.table_number} is now OPEN and available to seat guests.")
+        return redirect("restaurant:cashier_dashboard")
+
+    # If session has no running total / no items ordered
+    if session.running_subtotal <= Decimal("0.00"):
+        session.status = "CLOSED"
+        session.closed_at = timezone.now()
+        session.save(update_fields=["status", "closed_at"])
+        table.status = "AVAILABLE"
+        table.save(update_fields=["status"])
+        messages.success(
+            request,
+            f"Table {table.table_number} had no active orders and has been closed. It is now OPEN and available to seat guests."
+        )
         return redirect("restaurant:cashier_dashboard")
 
     try:
         bill = calculate_and_generate_bill(session, cashier=request.user)
-        return redirect("restaurant:cashier_settle_bill", bill_id=bill.id)
+        payment_method = request.GET.get("payment_method") or request.POST.get("payment_method") or "CASH"
+        payment = process_bill_payment(
+            bill=bill,
+            payment_method=payment_method,
+            amount_paid=bill.total,
+            processed_by=request.user,
+        )
+        table.refresh_from_db()
+        table.status = "AVAILABLE"
+        table.save(update_fields=["status"])
+
+        session.refresh_from_db()
+        session.status = "CLOSED"
+        session.save(update_fields=["status"])
+
+        messages.success(
+            request,
+            f"Bill #{bill.id} generated and settled via {payment.get_payment_method_display()}! Table {table.table_number} is now OPEN and available to seat guests."
+        )
+        return redirect("restaurant:cashier_receipt", bill_id=bill.id)
     except Exception as e:
-        messages.error(request, f"Could not generate bill: {e}")
+        messages.error(request, f"Could not generate and settle bill: {e}")
         return redirect("restaurant:cashier_dashboard")
 
 
@@ -2081,7 +2207,7 @@ def table_menu(request, qr_token):
     category_slug = request.GET.get("category", "").strip().lower()
     search_query = request.GET.get("q", "").strip()
 
-    categories = get_active_categories()
+    categories = list(get_active_categories())
     items_qs = get_active_menu_items(search_query=search_query)
 
     selected_category = None
@@ -2093,8 +2219,8 @@ def table_menu(request, qr_token):
                 break
 
     items_list = list(items_qs)
-    session_orders = session.orders.exclude(status="CANCELLED")
-    active_orders_count = session_orders.count()
+    active_orders_count = session.orders.exclude(status="CANCELLED").count()
+    session_subtotal = session.running_subtotal if active_orders_count > 0 else Decimal("0.00")
 
     return render(
         request,
@@ -2108,7 +2234,7 @@ def table_menu(request, qr_token):
             "search_query": search_query,
             "qr_token": qr_token,
             "active_orders_count": active_orders_count,
-            "session_subtotal": session.running_subtotal,
+            "session_subtotal": session_subtotal,
         },
     )
 
@@ -2408,8 +2534,10 @@ def manager_staff_roles(request):
     (WAITER, CHEF, CASHIER, MANAGER, ADMIN, CUSTOMER).
     """
     roles = ["WAITER", "CHEF", "CASHIER", "MANAGER", "ADMIN", "CUSTOMER"]
+    existing_groups = Group.objects.in_bulk(roles, field_name="name")
     for r in roles:
-        Group.objects.get_or_create(name=r)
+        if r not in existing_groups:
+            existing_groups[r], _ = Group.objects.get_or_create(name=r)
 
     if request.method == "POST":
         user_id = request.POST.get("user_id")
@@ -2417,19 +2545,19 @@ def manager_staff_roles(request):
         target_user = get_object_or_404(User, pk=user_id)
 
         if selected_role in roles:
-            for r in roles:
-                group = Group.objects.filter(name=r).first()
-                if group:
-                    target_user.groups.remove(group)
+            groups_to_remove = [existing_groups[r] for r in roles if r != selected_role and r in existing_groups]
+            if groups_to_remove:
+                target_user.groups.remove(*groups_to_remove)
 
-            new_group = Group.objects.get(name=selected_role)
-            target_user.groups.add(new_group)
+            target_user.groups.add(existing_groups[selected_role])
+            invalidate_user_role_cache(target_user)
+            if target_user.pk == request.user.pk:
+                invalidate_user_role_cache(request.user)
 
-            if selected_role in ["WAITER", "CHEF", "CASHIER", "MANAGER", "ADMIN"]:
-                target_user.is_staff = True
-            else:
-                target_user.is_staff = False
-            target_user.save(update_fields=["is_staff"])
+            is_staff_role = selected_role in ("WAITER", "CHEF", "CASHIER", "MANAGER", "ADMIN")
+            if target_user.is_staff != is_staff_role:
+                target_user.is_staff = is_staff_role
+                target_user.save(update_fields=["is_staff"])
 
             messages.success(request, f"Assigned role '{selected_role}' to {target_user.username} ({target_user.email}).")
             return redirect("restaurant:manager_staff_roles")
@@ -2466,11 +2594,13 @@ def manager_tables_list(request):
     Displays all dining tables, seating capacity, active session status,
     and links to generate or print QR codes.
     """
-    tables = RestaurantTable.objects.prefetch_related("sessions").order_by("table_number")
-    total_count = tables.count()
-    active_count = tables.filter(is_active=True).count()
-    occupied_count = tables.filter(status="OCCUPIED").count()
-    bill_pending_count = tables.filter(status="BILL_PENDING").count()
+    tables = attach_active_sessions_to_tables(
+        RestaurantTable.objects.order_by("table_number")
+    )
+    total_count = len(tables)
+    active_count = sum(1 for t in tables if t.is_active)
+    occupied_count = sum(1 for t in tables if t.status == "OCCUPIED")
+    bill_pending_count = sum(1 for t in tables if t.status == "BILL_PENDING")
 
     return render(
         request,
@@ -2601,4 +2731,33 @@ def manager_table_qr_image(request, table_id):
     buffer = io.BytesIO()
     img.save(buffer, format="PNG")
     return HttpResponse(buffer.getvalue(), content_type="image/png")
+
+
+def serve_stored_media(request, path):
+    """
+    Serves uploaded media from PostgreSQL (`StoredMedia`) with immutable browser caching,
+    falling back to local MEDIA_ROOT if present on disk.
+    """
+    clean_path = posixpath.normpath((path or "").replace("\\", "/")).lstrip("/")
+    if not clean_path or clean_path.startswith("../") or clean_path == "..":
+        raise Http404("Invalid media path.")
+
+    media = StoredMedia.objects.filter(name=clean_path).values("data", "content_type").first()
+    if media:
+        resp = HttpResponse(bytes(media["data"]), content_type=media["content_type"] or "application/octet-stream")
+        resp["Cache-Control"] = "public, max-age=31536000, immutable"
+        return resp
+
+    try:
+        full_path = Path(safe_join(str(settings.MEDIA_ROOT), clean_path))
+    except Exception:
+        raise Http404("Invalid media path.")
+
+    if full_path.is_file():
+        guessed_type = mimetypes.guess_type(str(full_path))[0] or "application/octet-stream"
+        resp = FileResponse(open(full_path, "rb"), content_type=guessed_type)
+        resp["Cache-Control"] = "public, max-age=86400"
+        return resp
+
+    raise Http404("Media file not found.")
 

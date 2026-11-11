@@ -42,13 +42,18 @@ class RestaurantTable(models.Model):
 
     class Meta:
         ordering = ["table_number"]
+        indexes = [
+            models.Index(fields=["is_active", "status"]),
+        ]
 
     def __str__(self):
         return f"Table {self.table_number} ({self.capacity} seats, {self.get_floor_area_display()}) - {self.status}"
 
     @property
     def current_session(self):
-        return self.sessions.filter(status="ACTIVE").first()
+        if hasattr(self, "_prefetched_active_sessions"):
+            return self._prefetched_active_sessions[0] if self._prefetched_active_sessions else None
+        return self.sessions.filter(status__in=["ACTIVE", "BILL_PENDING"]).first()
 
 
 class Reservation(models.Model):
@@ -85,6 +90,10 @@ class Reservation(models.Model):
 
     class Meta:
         ordering = ["-date", "-created_at"]
+        indexes = [
+            models.Index(fields=["date", "status"]),
+            models.Index(fields=["user", "date"]),
+        ]
 
     def __str__(self):
         return f"Booking #{self.id} - {self.name} on {self.date} at {self.time}"
@@ -183,9 +192,13 @@ class MenuItem(models.Model):
 
     class Meta:
         ordering = ["category__name", "name"]
+        indexes = [
+            models.Index(fields=["is_active", "is_available"]),
+        ]
 
     def __str__(self):
-        return f"{self.name} ({self.category.name}) - ₹{self.price}"
+        cat_label = self.category.name if self.category_id else "Uncategorized"
+        return f"{self.name} ({cat_label}) - ₹{self.price}"
 
     @property
     def can_be_ordered(self):
@@ -206,13 +219,13 @@ class MenuItem(models.Model):
                 return self.image.url
             except Exception:
                 pass
-        name_key = self.name.lower().strip()
+        name_key = (self.name or "").lower().strip()
         if name_key in CURATED_DISH_PHOTOS:
             return CURATED_DISH_PHOTOS[name_key]
         for key, url in CURATED_DISH_PHOTOS.items():
             if key in name_key or name_key in key:
                 return url
-        cat_key = self.category.name.lower().strip() if self.category else ""
+        cat_key = self.category.name.lower().strip() if self.category_id else ""
         return CATEGORY_DEFAULT_PHOTOS.get(
             cat_key,
             "https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=600&q=80",
@@ -244,6 +257,10 @@ class TableSession(models.Model):
 
     class Meta:
         ordering = ["-opened_at"]
+        indexes = [
+            models.Index(fields=["table", "status"]),
+            models.Index(fields=["status"]),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=["table"],
@@ -257,18 +274,31 @@ class TableSession(models.Model):
 
     @property
     def running_subtotal(self):
-        subtotal = Decimal("0.00")
-        for order in self.orders.exclude(status="CANCELLED"):
-            for item in order.items.exclude(status="CANCELLED"):
-                subtotal += item.subtotal
-        return subtotal
+        if hasattr(self, "_prefetched_subtotal") and self._prefetched_subtotal is not None:
+            return Decimal(self._prefetched_subtotal).quantize(Decimal("0.01"))
+        total = (
+            OrderItem.objects.filter(order__session=self)
+            .exclude(order__status="CANCELLED")
+            .exclude(status="CANCELLED")
+            .aggregate(
+                total=models.Sum(
+                    models.F("quantity") * models.F("unit_price"),
+                    output_field=models.DecimalField(max_digits=12, decimal_places=2),
+                )
+            )["total"]
+        )
+        return (total or Decimal("0.00")).quantize(Decimal("0.01"))
 
     @property
     def total_items_count(self):
-        count = 0
-        for order in self.orders.exclude(status="CANCELLED"):
-            count += order.items.exclude(status="CANCELLED").count()
-        return count
+        if hasattr(self, "_prefetched_items_count") and self._prefetched_items_count is not None:
+            return self._prefetched_items_count
+        return (
+            OrderItem.objects.filter(order__session=self)
+            .exclude(order__status="CANCELLED")
+            .exclude(status="CANCELLED")
+            .count()
+        )
 
 
 class Order(models.Model):
@@ -298,6 +328,10 @@ class Order(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["source", "status"]),
+            models.Index(fields=["session", "status"]),
+        ]
 
     def __str__(self):
         target = f"Session #{self.session_id}" if self.session_id else f"Bill #{self.bill_id}"
@@ -321,7 +355,15 @@ class Order(models.Model):
 
     @property
     def order_total(self):
-        return sum(item.subtotal for item in self.items.exclude(status="CANCELLED"))
+        if "items" in getattr(self, "_prefetched_objects_cache", {}):
+            return sum((item.subtotal for item in self.items.all() if item.status != "CANCELLED"), Decimal("0.00"))
+        total = self.items.exclude(status="CANCELLED").aggregate(
+            total=models.Sum(
+                models.F("quantity") * models.F("unit_price"),
+                output_field=models.DecimalField(max_digits=12, decimal_places=2),
+            )
+        )["total"]
+        return (total or Decimal("0.00")).quantize(Decimal("0.01"))
 
     @property
     def table_display(self):
@@ -369,6 +411,10 @@ class OrderItem(models.Model):
 
     class Meta:
         ordering = ["id"]
+        indexes = [
+            models.Index(fields=["status"]),
+            models.Index(fields=["order", "status"]),
+        ]
 
     def __str__(self):
         return f"{self.quantity}x {self.menu_item.name} in Order #{self.order_id}"
@@ -422,6 +468,11 @@ class Bill(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=["status", "created_at"]),
+        ]
+
     def __str__(self):
         if self.session and hasattr(self.session, "table"):
             return f"Bill #{self.id} for Table {self.session.table.table_number} - ₹{self.total} ({self.status})"
@@ -449,15 +500,22 @@ class Bill(models.Model):
 
     @property
     def all_orders(self):
-        if self.session:
-            return self.session.orders.exclude(status="CANCELLED")
-        return self.orders.exclude(status="CANCELLED")
+        if self.session_id:
+            return self.session.orders.exclude(status="CANCELLED").prefetch_related("items__menu_item")
+        return self.orders.exclude(status="CANCELLED").prefetch_related("items__menu_item")
 
     @property
     def total_items_count(self):
-        if self.session:
+        if hasattr(self, "_prefetched_items_count") and self._prefetched_items_count is not None:
+            return self._prefetched_items_count
+        if self.session_id:
             return self.session.total_items_count
-        return sum(order.items.exclude(status="CANCELLED").count() for order in self.orders.all())
+        return (
+            OrderItem.objects.filter(order__bill=self)
+            .exclude(order__status="CANCELLED")
+            .exclude(status="CANCELLED")
+            .count()
+        )
 
 
 class Payment(models.Model):
@@ -483,6 +541,12 @@ class Payment(models.Model):
     paid_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=["status", "created_at"]),
+            models.Index(fields=["status", "payment_method", "created_at"]),
+        ]
+
     def __str__(self):
         return f"Payment #{self.id} of ₹{self.amount} via {self.payment_method} ({self.status})"
 
@@ -501,3 +565,22 @@ class Payment(models.Model):
     @received_by.setter
     def received_by(self, val):
         self.processed_by = val
+
+
+class StoredMedia(models.Model):
+    """
+    Database-backed media storage for uploaded dish photos so uploads persist
+    across serverless / read-only filesystem deployments (e.g. Vercel).
+    """
+    name = models.CharField(max_length=255, unique=True, db_index=True)
+    content_type = models.CharField(max_length=100, default="application/octet-stream")
+    data = models.BinaryField()
+    size = models.PositiveIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "Stored Media Files"
+
+    def __str__(self):
+        return f"{self.name} ({self.size} bytes)"

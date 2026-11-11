@@ -1,6 +1,8 @@
 import re
 from django import forms
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import UploadedFile
+from django.db import IntegrityError
 from django.utils import timezone
 from .models import Reservation
 
@@ -290,7 +292,7 @@ class MenuItemForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        new_cat = cleaned_data.get("new_category_name", "").strip()
+        new_cat = (cleaned_data.get("new_category_name") or "").strip()
         category = cleaned_data.get("category")
 
         if new_cat:
@@ -299,7 +301,10 @@ class MenuItemForm(forms.ModelForm):
             cat_name = " ".join(word.capitalize() for word in new_cat.split())
             cat_obj = MenuCategory.objects.filter(name__iexact=cat_name).first()
             if not cat_obj:
-                cat_obj = MenuCategory.objects.create(name=cat_name, is_active=True)
+                try:
+                    cat_obj = MenuCategory.objects.create(name=cat_name, is_active=True)
+                except IntegrityError:
+                    cat_obj = MenuCategory.objects.filter(name__iexact=cat_name).first()
             cleaned_data["category"] = cat_obj
             self.instance.category = cat_obj
         elif not category:
@@ -308,7 +313,7 @@ class MenuItemForm(forms.ModelForm):
         return cleaned_data
 
     def clean_name(self):
-        name = self.cleaned_data.get("name", "").strip()
+        name = (self.cleaned_data.get("name") or "").strip()
         if not name:
             raise forms.ValidationError("Menu item name is required.")
         return name
@@ -325,17 +330,20 @@ class MenuItemForm(forms.ModelForm):
         prep = self.cleaned_data.get("preparation_time")
         if prep is None:
             raise forms.ValidationError("Preparation time is required.")
-        if prep < 0:
-            raise forms.ValidationError("Preparation time cannot be negative.")
+        if prep < 1:
+            raise forms.ValidationError("Preparation time must be at least 1 minute.")
+        if prep > 1440:
+            raise forms.ValidationError("Preparation time cannot exceed 1440 minutes.")
         return prep
 
     def clean_image(self):
         image = self.cleaned_data.get("image")
-        if image and hasattr(image, "name"):
-            valid_extensions = [".jpg", ".jpeg", ".png", ".webp", ".avif"]
+        # Only validate newly uploaded files; existing FieldFile instances may point to previously stored media.
+        if isinstance(image, UploadedFile) and hasattr(image, "name"):
+            valid_extensions = {".jpg", ".jpeg", ".png", ".webp", ".avif", ".gif"}
             extension = image.name.lower().rsplit(".", 1)[-1] if "." in image.name else ""
             if f".{extension}" not in valid_extensions:
-                raise forms.ValidationError("Invalid image format. Allowed: JPG, PNG, WEBP, AVIF.")
+                raise forms.ValidationError("Invalid image format. Allowed: JPG, PNG, WEBP, AVIF, GIF.")
             # Size check: 5MB limit
             if image.size > 5 * 1024 * 1024:
                 raise forms.ValidationError("Image file size exceeds the 5MB limit.")

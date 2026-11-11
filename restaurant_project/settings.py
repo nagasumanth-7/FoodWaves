@@ -103,6 +103,7 @@ if "test" in sys.argv:
         }
     }
 else:
+    db_conn_max_age = int(os.getenv("DB_CONN_MAX_AGE", "60" if os.getenv("VERCEL") else "300"))
     db_url = os.getenv("DATABASE_URL")
     if db_url:
         parsed = urllib.parse.urlparse(db_url)
@@ -115,7 +116,9 @@ else:
                 "PASSWORD": urllib.parse.unquote(parsed.password or "Sumanth@999"),
                 "HOST": parsed.hostname or "aws-0-ap-south-1.pooler.supabase.com",
                 "PORT": str(parsed.port or 5432),
-                "CONN_MAX_AGE": 0,
+                "CONN_MAX_AGE": db_conn_max_age,
+                "CONN_HEALTH_CHECKS": True,
+                "DISABLE_SERVER_SIDE_CURSORS": True,
             }
         }
     else:
@@ -127,7 +130,9 @@ else:
                 "PASSWORD": os.getenv("DB_PASSWORD", "Sumanth@999"),
                 "HOST": os.getenv("DB_HOST", "aws-0-ap-south-1.pooler.supabase.com"),
                 "PORT": os.getenv("DB_PORT", "5432"),
-                "CONN_MAX_AGE": 0,
+                "CONN_MAX_AGE": db_conn_max_age,
+                "CONN_HEALTH_CHECKS": True,
+                "DISABLE_SERVER_SIDE_CURSORS": True,
             }
         }
 
@@ -146,6 +151,14 @@ STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
+STORAGES = {
+    "default": {
+        "BACKEND": "restaurant.storage.DatabaseMediaStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTHENTICATION_BACKENDS = [

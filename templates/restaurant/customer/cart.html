@@ -415,31 +415,6 @@
 
     const btn = document.getElementById("btnPlaceOrder");
     btn.disabled = true;
-    btn.textContent = "Validating with kitchen...";
-
-    // 1. Validate cart availability
-    try {
-      const valRes = await fetch("{% url 'restaurant:api_validate_cart' %}", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRFToken": "{{ csrf_token }}"
-        },
-        body: JSON.stringify({ items: cart })
-      });
-      const valData = await valRes.json();
-
-      if (!valRes.ok || !valData.valid) {
-        alert("Some items could not be placed:\n" + (valData.errors ? valData.errors.join("\n") : valData.message));
-        btn.disabled = false;
-        btn.textContent = "🚀 Send Order to Kitchen";
-        return;
-      }
-    } catch(err) {
-      console.warn("Validation request note:", err);
-    }
-
-    // 2. Submit order to kitchen
     btn.textContent = "Transmitting order to Kitchen KDS...";
     const instructions = document.getElementById("orderInstructions").value;
 

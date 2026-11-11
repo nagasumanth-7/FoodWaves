@@ -217,7 +217,7 @@
 
         <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
           <a class="button button-gold" href="{% url 'restaurant:chef_kds' %}">
-            <span>👨‍🍳 Open Live KDS Screen ({{ active_orders.count }} Tickets) →</span>
+            <span>👨‍🍳 Open Live KDS Screen ({{ active_orders_count }} Tickets) →</span>
           </a>
           <a class="button button-outline" href="{% url 'restaurant:chef_menu_list' %}">
             <span>Menu Availability Board</span>
@@ -229,7 +229,7 @@
       <div class="chef-stats">
         <div class="chef-stat-card">
           <div class="stat-label">Active Orders</div>
-          <div class="stat-val" style="color: var(--cyan);">{{ active_orders.count }}</div>
+          <div class="stat-val" style="color: var(--cyan);">{{ active_orders_count }}</div>
         </div>
 
         <div class="chef-stat-card">

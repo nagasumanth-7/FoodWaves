@@ -32,15 +32,33 @@ def validate_cart_items(cart_items):
     Returns: (is_valid: bool, errors: list[str])
     """
     errors = []
+    item_ids = []
+    for entry in cart_items:
+        item_id = entry.get("item_id")
+        if item_id is not None:
+            try:
+                item_ids.append(int(item_id))
+            except (TypeError, ValueError):
+                pass
+
+    items_map = MenuItem.objects.in_bulk(item_ids) if item_ids else {}
+
     for entry in cart_items:
         item_id = entry.get("item_id")
         try:
-            item = MenuItem.objects.get(pk=item_id)
-            is_valid, msg = validate_menu_item_availability(item)
-            if not is_valid:
-                errors.append(msg)
-        except MenuItem.DoesNotExist:
+            lookup_id = int(item_id)
+        except (TypeError, ValueError):
             errors.append(f"Item #{item_id} does not exist.")
+            continue
+
+        item = items_map.get(lookup_id)
+        if not item:
+            errors.append(f"Item #{item_id} does not exist.")
+            continue
+
+        is_valid, msg = validate_menu_item_availability(item)
+        if not is_valid:
+            errors.append(msg)
 
     return (len(errors) == 0, errors)
 
@@ -49,6 +67,7 @@ def create_order_for_session(session, items_data, placed_by=None, source="CUSTOM
     """
     Sections 13, 14, 15:
     Atomically creates an Order and freezes unit_price from the database for each OrderItem.
+    Uses bulk fetch and bulk insert to minimize database round-trips.
     """
     if not items_data:
         raise ValidationError("Cannot place an empty order. Select at least one item.")
@@ -56,14 +75,33 @@ def create_order_for_session(session, items_data, placed_by=None, source="CUSTOM
     if session.status != "ACTIVE":
         raise ValidationError("Cannot place orders for an inactive or closed table session.")
 
+    # Parse quantities and item IDs upfront
+    parsed_entries = []
+    item_ids = set()
+    for entry in items_data:
+        item_id = entry.get("item_id")
+        qty = int(entry.get("quantity", 1))
+        if qty <= 0:
+            raise ValidationError("Quantity must be at least 1.")
+        notes = (entry.get("notes") or "").strip()
+        try:
+            int_id = int(item_id)
+        except (TypeError, ValueError):
+            raise ValidationError(f"Menu item with ID {item_id} does not exist.")
+        item_ids.add(int_id)
+        parsed_entries.append((int_id, qty, notes))
+
     with transaction.atomic():
-        # 1. Validate all items before persisting any database changes
+        # 1. Batch fetch & validate all menu items in 1 query
+        items_map = MenuItem.objects.in_bulk(list(item_ids))
         validated_items = []
-        for entry in items_data:
-            item_id = entry.get("item_id")
-            qty = int(entry.get("quantity", 1))
-            notes = entry.get("notes", "").strip()
-            menu_item = validate_order_item_selection(item_id, quantity=qty)
+        for int_id, qty, notes in parsed_entries:
+            menu_item = items_map.get(int_id)
+            if not menu_item:
+                raise ValidationError(f"Menu item with ID {int_id} does not exist.")
+            is_valid, error_msg = validate_menu_item_availability(menu_item)
+            if not is_valid:
+                raise ValidationError(error_msg)
             validated_items.append((menu_item, qty, notes))
 
         # 2. Create the parent Order
@@ -75,10 +113,9 @@ def create_order_for_session(session, items_data, placed_by=None, source="CUSTOM
             special_instructions=instructions.strip(),
         )
 
-        # 3. Create OrderItems with frozen unit_price from DB and initial PENDING status
-        for menu_item, qty, notes in validated_items:
-            prep_est = menu_item.preparation_time or 15
-            OrderItem.objects.create(
+        # 3. Bulk create OrderItems with frozen unit_price from DB and initial PENDING status
+        order_items_to_create = [
+            OrderItem(
                 order=order,
                 menu_item=menu_item,
                 quantity=qty,
@@ -86,9 +123,12 @@ def create_order_for_session(session, items_data, placed_by=None, source="CUSTOM
                 special_instructions=notes,
                 status="PENDING",
                 started_at=None,
-                estimated_minutes=prep_est,
+                estimated_minutes=menu_item.preparation_time or 15,
                 estimated_ready_at=None,
             )
+            for menu_item, qty, notes in validated_items
+        ]
+        OrderItem.objects.bulk_create(order_items_to_create)
 
         return order
 

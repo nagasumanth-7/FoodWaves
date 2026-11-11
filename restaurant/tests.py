@@ -17,6 +17,7 @@ from .models import (
     TableSession,
     Order,
     OrderItem,
+    Bill,
 )
 from .services.menu_service import (
     delete_or_archive_menu_item,
@@ -106,6 +107,17 @@ class SupabaseAuthAndReservationTests(TestCase):
         self.assertTrue(user.is_active)
         self.assertTrue(user.profile.is_email_verified)
         self.assertEqual(self.client.session.get("supabase_token"), "mock-jwt-token")
+
+        # Subsequent login uses verified local credentials cleanly without blocking on Supabase HTTP
+        self.client.logout()
+        mock_sign_in.reset_mock()
+        resp2 = self.client.post(self.login_url, {
+            "email": "verified@example.com",
+            "password": "SecretPassword1",
+        })
+        self.assertEqual(resp2.status_code, 302)
+        self.assertRedirects(resp2, self.reserve_url)
+        self.assertFalse(mock_sign_in.called)
 
     @patch("restaurant.views.supabase_resend_confirmation")
     def test_resend_verification_supabase(self, mock_resend):
@@ -555,6 +567,59 @@ class MenuManagementAndSecurityTests(TestCase):
         self.assertIn("archived_count", resp_list.context)
         self.assertGreaterEqual(resp_list.context["archived_count"], 1)
 
+    # 4d. Editing menu item with uploaded photo or legacy missing disk image works without 500 errors
+    def test_manager_edit_menu_item_with_photo_and_missing_disk_file(self):
+        import io
+        from PIL import Image
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from django.test import override_settings
+        from restaurant.models import StoredMedia
+
+        self.client.force_login(self.manager)
+
+        # Simulate item whose image path is saved in DB but missing on read-only deployment disk
+        legacy_item = MenuItem.objects.create(
+            category=self.cat_biryani,
+            name="Legacy Dish",
+            description="Existing photo path not on disk",
+            price=Decimal("250.00"),
+            preparation_time=20,
+            image="menu_images/missing_on_disk.png",
+        )
+        edit_url = reverse("restaurant:manager_menu_edit", kwargs={"item_id": legacy_item.id})
+
+        with override_settings(DEBUG=False, MEDIA_ROOT="/nonexistent_ro_media"):
+            # Editing without replacing photo must NOT crash in clean_image()
+            resp_keep = self.client.post(edit_url, {
+                "category": self.cat_biryani.id,
+                "name": "Legacy Dish Updated",
+                "description": "Updated description",
+                "price": "260.00",
+                "preparation_time": 25,
+                "is_available": True,
+            })
+            self.assertEqual(resp_keep.status_code, 302)
+
+            # Uploading a new photo must save to DatabaseMediaStorage without touching disk and serve with 200
+            buf = io.BytesIO()
+            Image.new("RGB", (60, 60), color="teal").save(buf, format="PNG")
+            uploaded = SimpleUploadedFile("fresh_dish.png", buf.getvalue(), content_type="image/png")
+            resp_upload = self.client.post(edit_url, {
+                "category": self.cat_biryani.id,
+                "name": "Legacy Dish Photo Updated",
+                "description": "Updated with photo",
+                "price": "270.00",
+                "preparation_time": 25,
+                "is_available": True,
+                "image": uploaded,
+            })
+            self.assertEqual(resp_upload.status_code, 302)
+
+            legacy_item.refresh_from_db()
+            self.assertTrue(StoredMedia.objects.filter(name=legacy_item.image.name).exists())
+            media_resp = self.client.get(legacy_item.photo_url)
+            self.assertEqual(media_resp.status_code, 200)
+
     # 5. Manager can permanently delete unused item (Item 6)
     def test_manager_delete_unused_item_permanently_deletes(self):
         self.client.force_login(self.manager)
@@ -846,6 +911,72 @@ class MenuManagementAndSecurityTests(TestCase):
         # 4. Reports view returns 200
         reports_resp = self.client.get(reverse("restaurant:cashier_reports"))
         self.assertEqual(reports_resp.status_code, 200)
+
+    # 18b. Cashier press "Generate & Settle Bill" generates bill and ensures table is OPEN (AVAILABLE), not occupied
+    def test_cashier_press_generate_and_settle_bill_frees_table_and_generates_bill(self):
+        table = RestaurantTable.objects.create(table_number="T-99", capacity=4, status="OCCUPIED")
+        session = TableSession.objects.create(
+            table=table,
+            guest_name="Sharma Party",
+            guest_count=4,
+            waiter=self.waiter,
+            status="ACTIVE",
+        )
+        order = Order.objects.create(session=session, status="ACCEPTED")
+        OrderItem.objects.create(
+            order=order,
+            menu_item=self.item_biryani,
+            quantity=2,
+            unit_price=Decimal("280.00"),
+            status="SERVED",
+        )
+
+        self.client.force_login(self.cashier)
+        gen_url = reverse("restaurant:cashier_generate_bill", kwargs={"table_id": table.id})
+        resp = self.client.get(gen_url)
+        self.assertEqual(resp.status_code, 302)
+
+        # Table must be OPEN (AVAILABLE, not OCCUPIED)
+        table.refresh_from_db()
+        self.assertEqual(table.status, "AVAILABLE")
+
+        # Session must be closed
+        session.refresh_from_db()
+        self.assertEqual(session.status, "CLOSED")
+
+        # Bill must be generated and settled
+        bill = Bill.objects.get(session=session)
+        self.assertEqual(bill.status, "PAID")
+        self.assertRedirects(resp, reverse("restaurant:cashier_receipt", kwargs={"bill_id": bill.id}))
+
+    # 18c. Cashier generating and settling empty table session cleanly frees table to OPEN
+    def test_cashier_generate_and_settle_empty_session_frees_table(self):
+        table = RestaurantTable.objects.create(table_number="T-100", capacity=2, status="OCCUPIED")
+        session = TableSession.objects.create(
+            table=table,
+            guest_name="Walk-in Guest",
+            guest_count=2,
+            waiter=self.waiter,
+            status="ACTIVE",
+        )
+
+        self.client.force_login(self.cashier)
+        gen_url = reverse("restaurant:cashier_generate_bill", kwargs={"table_id": table.id})
+        resp = self.client.get(gen_url)
+        self.assertEqual(resp.status_code, 302)
+        self.assertRedirects(resp, reverse("restaurant:cashier_dashboard"))
+
+        table.refresh_from_db()
+        self.assertEqual(table.status, "AVAILABLE")
+        session.refresh_from_db()
+        self.assertEqual(session.status, "CLOSED")
+
+    # 18d. Reset tables management command opens all tables
+    def test_reset_tables_management_command(self):
+        from django.core.management import call_command
+        RestaurantTable.objects.create(table_number="T-101", capacity=2, status="OCCUPIED")
+        call_command("reset_tables")
+        self.assertFalse(RestaurantTable.objects.exclude(status="AVAILABLE").exists())
 
     # 19. Security checks for Waiter and Cashier portals
     def test_role_permissions_waiter_and_cashier(self):

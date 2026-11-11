@@ -5,6 +5,31 @@ from django.contrib import messages
 from django.urls import reverse
 
 
+def get_user_role_names(user):
+    """
+    Returns the set of group names for an authenticated user using a single query,
+    caching on the user instance for the current request.
+    """
+    if not user or not user.is_authenticated:
+        return set()
+    cached = getattr(user, "_cached_role_names", None)
+    if cached is not None:
+        return cached
+    prefetched = getattr(user, "_prefetched_objects_cache", {})
+    if "groups" in prefetched:
+        names = {g.name for g in user.groups.all()}
+    else:
+        names = set(user.groups.values_list("name", flat=True))
+    user._cached_role_names = names
+    return names
+
+
+def invalidate_user_role_cache(user):
+    """Clears cached role names after a user's group memberships are modified."""
+    if hasattr(user, "_cached_role_names"):
+        delattr(user, "_cached_role_names")
+
+
 def user_has_any_role(user, allowed_roles):
     """
     Checks if a user belongs to any of the allowed roles, or is a superuser.
@@ -14,7 +39,7 @@ def user_has_any_role(user, allowed_roles):
         return False
     if user.is_superuser:
         return True
-    return user.groups.filter(name__in=allowed_roles).exists()
+    return bool(get_user_role_names(user).intersection(allowed_roles))
 
 
 def role_required(allowed_roles, redirect_url="restaurant:home"):

@@ -266,7 +266,14 @@
                 Running Total: <b style="color: var(--gold-light);">₹{{ table.current_session.running_subtotal }}</b>
               </div>
               <a href="{% url 'restaurant:cashier_generate_bill' table.id %}" class="button" style="width: 100%; text-align: center; justify-content: center; padding: 8px 12px; font-size: 13px;">
-                Generate & Settle Bill →
+                {% if table.current_session.running_subtotal > 0 %}Generate & Settle Bill →{% else %}Free & Open Table →{% endif %}
+              </a>
+            {% else %}
+              <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 14px;">
+                No active session found.
+              </div>
+              <a href="{% url 'restaurant:cashier_generate_bill' table.id %}" class="button" style="width: 100%; text-align: center; justify-content: center; padding: 8px 12px; font-size: 13px; background: rgba(59, 130, 246, 0.2); border-color: rgba(59, 130, 246, 0.5);">
+                Free & Open Table →
               </a>
             {% endif %}
           </div>

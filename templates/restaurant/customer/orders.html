@@ -284,9 +284,10 @@
 </div>
 
 <script>
-  let lastStateFingerprint = "";
+  let lastStateFingerprint = "{% for o in orders %}{{ o.id }}:{{ o.status }}:[{% for i in o.items.all %}{{ i.id }}:{{ i.status }}:{{ i.estimated_minutes }}{% if not forloop.last %},{% endif %}{% endfor %}]{% if not forloop.last %}|{% endif %}{% endfor %}|session:{{ session.status }}";
 
   async function checkOrderStatusUpdates() {
+    if (document.hidden) return;
     try {
       const res = await fetch("{% url 'restaurant:customer_orders' qr_token=qr_token %}?format=json", {
         headers: { "X-Requested-With": "XMLHttpRequest" }
@@ -311,9 +312,8 @@
     }
   }
 
-  // Initial check and 5-second polling for responsive live tracking
-  checkOrderStatusUpdates();
-  setInterval(checkOrderStatusUpdates, 5000);
+  // Poll every 8 seconds while tab is active
+  setInterval(checkOrderStatusUpdates, 8000);
 </script>
 {% endblock %}
 

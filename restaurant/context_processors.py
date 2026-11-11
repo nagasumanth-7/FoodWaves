@@ -1,4 +1,5 @@
 from django.urls import reverse
+from .permissions import get_user_role_names
 
 
 def staff_role_context(request):
@@ -20,11 +21,12 @@ def staff_role_context(request):
             "user_portal_name": None,
         }
 
-    is_admin = user.is_superuser or user.groups.filter(name="ADMIN").exists()
-    is_waiter = user.groups.filter(name="WAITER").exists()
-    is_chef = user.groups.filter(name="CHEF").exists()
-    is_cashier = user.groups.filter(name="CASHIER").exists()
-    is_manager = user.groups.filter(name="MANAGER").exists()
+    role_names = get_user_role_names(user)
+    is_admin = user.is_superuser or ("ADMIN" in role_names)
+    is_waiter = "WAITER" in role_names
+    is_chef = "CHEF" in role_names
+    is_cashier = "CASHIER" in role_names
+    is_manager = "MANAGER" in role_names
 
     portal_url = None
     portal_name = None

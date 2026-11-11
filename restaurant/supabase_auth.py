@@ -1,17 +1,35 @@
-import json
-import urllib.request
-import urllib.error
 import urllib.parse
+import requests
+from requests.adapters import HTTPAdapter
 from django.conf import settings
 
+# Module-level pooled HTTPS session so repeated calls to Supabase GoTrue reuse TLS sockets.
+_http_session = requests.Session()
+_adapter = HTTPAdapter(pool_connections=4, pool_maxsize=10)
+_http_session.mount("https://", _adapter)
+_http_session.mount("http://", _adapter)
 
-def _get_headers():
+
+def _get_headers(access_token=None):
     anon_key = getattr(settings, "SUPABASE_ANON_KEY", "")
     return {
         "apikey": anon_key,
-        "Authorization": f"Bearer {anon_key}",
+        "Authorization": f"Bearer {access_token or anon_key}",
         "Content-Type": "application/json",
     }
+
+
+def _get_base_config():
+    base_url = getattr(settings, "SUPABASE_URL", "").rstrip("/")
+    anon_key = getattr(settings, "SUPABASE_ANON_KEY", "")
+    return base_url, anon_key
+
+
+def _parse_json_error(resp):
+    try:
+        return resp.json()
+    except Exception:
+        return {}
 
 
 def supabase_sign_up(email, password, name, phone_number, redirect_to=None):
@@ -19,9 +37,7 @@ def supabase_sign_up(email, password, name, phone_number, redirect_to=None):
     Register a customer using official Supabase GoTrue Auth API v1.
     Supabase sends an email confirmation link if 'Confirm email' is enabled in the Supabase project.
     """
-    base_url = getattr(settings, "SUPABASE_URL", "").rstrip("/")
-    anon_key = getattr(settings, "SUPABASE_ANON_KEY", "")
-
+    base_url, anon_key = _get_base_config()
     if not base_url or not anon_key:
         return False, None, "Supabase authentication is not configured in settings (SUPABASE_URL or SUPABASE_ANON_KEY missing)."
 
@@ -40,45 +56,35 @@ def supabase_sign_up(email, password, name, phone_number, redirect_to=None):
     if redirect_to:
         payload["options"] = {"emailRedirectTo": redirect_to}
 
-    data_bytes = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data_bytes, headers=_get_headers(), method="POST")
-
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return True, data, None
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode("utf-8")
-        try:
-            err_data = json.loads(error_body)
-            raw_msg = (
-                err_data.get("msg")
-                or err_data.get("message")
-                or err_data.get("error_description")
-                or f"Sign up failed (HTTP {e.code})."
+        resp = _http_session.post(url, json=payload, headers=_get_headers(), timeout=30)
+        if resp.ok:
+            return True, resp.json(), None
+        err_data = _parse_json_error(resp)
+        raw_msg = (
+            err_data.get("msg")
+            or err_data.get("message")
+            or err_data.get("error_description")
+            or f"Sign up failed (HTTP {resp.status_code})."
+        )
+        err_code = (err_data.get("error_code") or err_data.get("code") or "").lower()
+        if "error sending confirmation email" in raw_msg.lower() or err_code == "unexpected_failure":
+            msg = (
+                "Error sending confirmation email: Supabase could not deliver the confirmation email. "
+                "This occurs when custom SMTP credentials in the Supabase Dashboard (Authentication -> SMTP Provider) "
+                "are rejected or timeout (e.g. Gmail requires a 16-character Google App Password, port 587 TLS, and matching sender address), "
+                "or when the Supabase default email rate limit is exceeded."
             )
-            err_code = (err_data.get("error_code") or err_data.get("code") or "").lower()
-            if "error sending confirmation email" in raw_msg.lower() or err_code == "unexpected_failure":
-                msg = (
-                    "Error sending confirmation email: Supabase could not deliver the confirmation email. "
-                    "This occurs when custom SMTP credentials in the Supabase Dashboard (Authentication -> SMTP Provider) "
-                    "are rejected or timeout (e.g. Gmail requires a 16-character Google App Password, port 587 TLS, and matching sender address), "
-                    "or when the Supabase default email rate limit is exceeded."
-                )
-            else:
-                msg = raw_msg
-        except Exception:
-            msg = f"HTTP Error {e.code}: {e.reason}"
+        else:
+            msg = raw_msg
         return False, None, msg
-    except urllib.error.URLError as e:
-        if "timed out" in str(e).lower():
-            return (
-                False,
-                None,
-                "The authentication request to Supabase timed out while attempting to dispatch the confirmation email. "
-                "Please verify your SMTP settings in the Supabase Project Dashboard.",
-            )
-        return False, None, str(e)
+    except requests.Timeout:
+        return (
+            False,
+            None,
+            "The authentication request to Supabase timed out while attempting to dispatch the confirmation email. "
+            "Please verify your SMTP settings in the Supabase Project Dashboard.",
+        )
     except Exception as e:
         return False, None, str(e)
 
@@ -92,9 +98,7 @@ def supabase_sign_in(email, password):
       (False, 'invalid_credentials', msg) if wrong credentials
       (False, 'error', msg) for other errors
     """
-    base_url = getattr(settings, "SUPABASE_URL", "").rstrip("/")
-    anon_key = getattr(settings, "SUPABASE_ANON_KEY", "")
-
+    base_url, anon_key = _get_base_config()
     if not base_url or not anon_key:
         return False, "error", "Supabase authentication is not configured in settings."
 
@@ -103,28 +107,21 @@ def supabase_sign_in(email, password):
         "email": email.strip().lower(),
         "password": password,
     }
-    data_bytes = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data_bytes, headers=_get_headers(), method="POST")
 
     try:
-        with urllib.request.urlopen(req, timeout=12) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return True, data, None
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode("utf-8")
-        try:
-            err_data = json.loads(error_body)
-            desc = (err_data.get("error_description") or err_data.get("msg") or err_data.get("message") or "").lower()
-            code = (err_data.get("error_code") or err_data.get("error") or "").lower()
+        resp = _http_session.post(url, json=payload, headers=_get_headers(), timeout=12)
+        if resp.ok:
+            return True, resp.json(), None
+        err_data = _parse_json_error(resp)
+        desc = (err_data.get("error_description") or err_data.get("msg") or err_data.get("message") or "").lower()
+        code = (err_data.get("error_code") or err_data.get("error") or "").lower()
 
-            if "email not confirmed" in desc or code == "email_not_confirmed":
-                return False, "email_not_confirmed", "Email not confirmed. Please check your inbox for the confirmation link sent by Supabase."
-            if "invalid login credentials" in desc or "invalid" in desc or code == "invalid_grant":
-                return False, "invalid_credentials", "Invalid email or password. Please try again."
+        if "email not confirmed" in desc or code == "email_not_confirmed":
+            return False, "email_not_confirmed", "Email not confirmed. Please check your inbox for the confirmation link sent by Supabase."
+        if "invalid login credentials" in desc or "invalid" in desc or code == "invalid_grant":
+            return False, "invalid_credentials", "Invalid email or password. Please try again."
 
-            return False, "error", err_data.get("error_description") or err_data.get("msg") or "Authentication failed."
-        except Exception:
-            return False, "error", f"HTTP {e.code}: {e.reason}"
+        return False, "error", err_data.get("error_description") or err_data.get("msg") or f"HTTP {resp.status_code}: {resp.reason}"
     except Exception as e:
         return False, "error", str(e)
 
@@ -133,9 +130,7 @@ def supabase_resend_confirmation(email, redirect_to=None):
     """
     Trigger a new confirmation email from Supabase GoTrue Auth API v1 (/auth/v1/resend).
     """
-    base_url = getattr(settings, "SUPABASE_URL", "").rstrip("/")
-    anon_key = getattr(settings, "SUPABASE_ANON_KEY", "")
-
+    base_url, anon_key = _get_base_config()
     if not base_url or not anon_key:
         return False, "Supabase authentication is not configured in settings."
 
@@ -150,37 +145,28 @@ def supabase_resend_confirmation(email, redirect_to=None):
     if redirect_to:
         payload["options"] = {"emailRedirectTo": redirect_to}
 
-    data_bytes = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data_bytes, headers=_get_headers(), method="POST")
-
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        resp = _http_session.post(url, json=payload, headers=_get_headers(), timeout=30)
+        if resp.ok:
             return True, None
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode("utf-8")
-        try:
-            err_data = json.loads(error_body)
-            raw_msg = (
-                err_data.get("msg")
-                or err_data.get("message")
-                or err_data.get("error_description")
-                or "Resend failed."
+        err_data = _parse_json_error(resp)
+        raw_msg = (
+            err_data.get("msg")
+            or err_data.get("message")
+            or err_data.get("error_description")
+            or "Resend failed."
+        )
+        err_code = (err_data.get("error_code") or err_data.get("code") or "").lower()
+        if "error sending confirmation email" in raw_msg.lower() or err_code == "unexpected_failure":
+            msg = (
+                "Error sending confirmation email: Supabase could not deliver the email. "
+                "Please check your Supabase SMTP settings or rate limits."
             )
-            err_code = (err_data.get("error_code") or err_data.get("code") or "").lower()
-            if "error sending confirmation email" in raw_msg.lower() or err_code == "unexpected_failure":
-                msg = (
-                    "Error sending confirmation email: Supabase could not deliver the email. "
-                    "Please check your Supabase SMTP settings or rate limits."
-                )
-            else:
-                msg = raw_msg
-        except Exception:
-            msg = f"HTTP Error {e.code}"
+        else:
+            msg = raw_msg
         return False, msg
-    except urllib.error.URLError as e:
-        if "timed out" in str(e).lower():
-            return False, "The resend request timed out while contacting the SMTP server. Please check your Supabase SMTP settings."
-        return False, str(e)
+    except requests.Timeout:
+        return False, "The resend request timed out while contacting the SMTP server. Please check your Supabase SMTP settings."
     except Exception as e:
         return False, str(e)
 
@@ -189,21 +175,13 @@ def supabase_sign_out(access_token=None):
     """
     Sign out user from Supabase Auth (/auth/v1/logout).
     """
-    base_url = getattr(settings, "SUPABASE_URL", "").rstrip("/")
-    anon_key = getattr(settings, "SUPABASE_ANON_KEY", "")
-
+    base_url, anon_key = _get_base_config()
     if not base_url or not anon_key:
         return
 
     url = f"{base_url}/auth/v1/logout"
-    headers = _get_headers()
-    if access_token:
-        headers["Authorization"] = f"Bearer {access_token}"
-
-    req = urllib.request.Request(url, headers=headers, method="POST")
     try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            pass
+        _http_session.post(url, headers=_get_headers(access_token), timeout=3)
     except Exception:
         pass
 
@@ -212,21 +190,16 @@ def supabase_get_user(access_token):
     """
     Retrieves user object from Supabase Auth (/auth/v1/user) using their access token.
     """
-    base_url = getattr(settings, "SUPABASE_URL", "").rstrip("/")
-    anon_key = getattr(settings, "SUPABASE_ANON_KEY", "")
-
+    base_url, anon_key = _get_base_config()
     if not base_url or not anon_key or not access_token:
         return None
 
     url = f"{base_url}/auth/v1/user"
-    headers = {
-        "apikey": anon_key,
-        "Authorization": f"Bearer {access_token}",
-    }
-    req = urllib.request.Request(url, headers=headers, method="GET")
     try:
-        with urllib.request.urlopen(req, timeout=8) as resp:
-            return json.loads(resp.read().decode("utf-8"))
+        resp = _http_session.get(url, headers=_get_headers(access_token), timeout=8)
+        if resp.ok:
+            return resp.json()
+        return None
     except Exception:
         return None
 
@@ -236,9 +209,7 @@ def supabase_reset_password_request(email, redirect_to=None):
     Request a password recovery email from Supabase Auth (/auth/v1/recover).
     Supabase sends an email containing a secure link to reset the password.
     """
-    base_url = getattr(settings, "SUPABASE_URL", "").rstrip("/")
-    anon_key = getattr(settings, "SUPABASE_ANON_KEY", "")
-
+    base_url, anon_key = _get_base_config()
     if not base_url or not anon_key:
         return False, "Supabase authentication is not configured in settings."
 
@@ -252,24 +223,17 @@ def supabase_reset_password_request(email, redirect_to=None):
     if redirect_to:
         payload["options"] = {"emailRedirectTo": redirect_to}
 
-    data_bytes = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data_bytes, headers=_get_headers(), method="POST")
-
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        resp = _http_session.post(url, json=payload, headers=_get_headers(), timeout=15)
+        if resp.ok:
             return True, None
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode("utf-8")
-        try:
-            err_data = json.loads(error_body)
-            msg = (
-                err_data.get("msg")
-                or err_data.get("message")
-                or err_data.get("error_description")
-                or f"Password reset request failed (HTTP {e.code})."
-            )
-        except Exception:
-            msg = f"HTTP Error {e.code}: {e.reason}"
+        err_data = _parse_json_error(resp)
+        msg = (
+            err_data.get("msg")
+            or err_data.get("message")
+            or err_data.get("error_description")
+            or f"Password reset request failed (HTTP {resp.status_code})."
+        )
         return False, msg
     except Exception as e:
         return False, str(e)
@@ -280,40 +244,26 @@ def supabase_update_user_password(access_token, new_password):
     Updates the authenticated user's password in Supabase Auth (/auth/v1/user).
     Returns: (True, user_data, None) on success or (False, None, error_message) on error.
     """
-    base_url = getattr(settings, "SUPABASE_URL", "").rstrip("/")
-    anon_key = getattr(settings, "SUPABASE_ANON_KEY", "")
-
+    base_url, anon_key = _get_base_config()
     if not base_url or not anon_key or not access_token:
         return False, None, "Invalid or missing access token."
 
     url = f"{base_url}/auth/v1/user"
-    headers = {
-        "apikey": anon_key,
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json",
-    }
     payload = {
         "password": new_password,
     }
-    data_bytes = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data_bytes, headers=headers, method="PUT")
 
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return True, data, None
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode("utf-8")
-        try:
-            err_data = json.loads(error_body)
-            msg = (
-                err_data.get("msg")
-                or err_data.get("message")
-                or err_data.get("error_description")
-                or f"Password update failed (HTTP {e.code})."
-            )
-        except Exception:
-            msg = f"HTTP Error {e.code}: {e.reason}"
+        resp = _http_session.put(url, json=payload, headers=_get_headers(access_token), timeout=15)
+        if resp.ok:
+            return True, resp.json(), None
+        err_data = _parse_json_error(resp)
+        msg = (
+            err_data.get("msg")
+            or err_data.get("message")
+            or err_data.get("error_description")
+            or f"Password update failed (HTTP {resp.status_code})."
+        )
         return False, None, msg
     except Exception as e:
         return False, None, str(e)
@@ -324,32 +274,23 @@ def supabase_verify_token(token_hash, type_="email"):
     Verifies a token_hash with Supabase GoTrue Auth API (/auth/v1/verify).
     Returns (True, data, None) or (False, None, error_msg).
     """
-    base_url = getattr(settings, "SUPABASE_URL", "").rstrip("/")
-    anon_key = getattr(settings, "SUPABASE_ANON_KEY", "")
-
+    base_url, anon_key = _get_base_config()
     if not base_url or not anon_key or not token_hash:
         return False, None, "Invalid or missing token hash."
 
     url = f"{base_url}/auth/v1/verify?token_hash={urllib.parse.quote(token_hash)}&type={urllib.parse.quote(type_)}"
-    req = urllib.request.Request(url, headers=_get_headers(), method="GET")
 
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return True, data, None
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode("utf-8")
-        try:
-            err_data = json.loads(error_body)
-            msg = (
-                err_data.get("msg")
-                or err_data.get("message")
-                or err_data.get("error_description")
-                or f"Verification failed (HTTP {e.code})."
-            )
-        except Exception:
-            msg = f"HTTP Error {e.code}: {e.reason}"
+        resp = _http_session.get(url, headers=_get_headers(), timeout=15)
+        if resp.ok:
+            return True, resp.json(), None
+        err_data = _parse_json_error(resp)
+        msg = (
+            err_data.get("msg")
+            or err_data.get("message")
+            or err_data.get("error_description")
+            or f"Verification failed (HTTP {resp.status_code})."
+        )
         return False, None, msg
     except Exception as e:
         return False, None, str(e)
-
