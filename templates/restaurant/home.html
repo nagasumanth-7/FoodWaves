@@ -6,25 +6,38 @@
 {% block head %}
   <style>
     :root {
-      --mood-glow-1: rgba(6, 182, 212, 0.22);
-      --mood-glow-2: rgba(243, 194, 113, 0.14);
-      --mood-accent: #75fff0;
-      --mood-accent-rgb: 117, 255, 240;
-      --mood-gold: #f3c271;
+      --mood-glow-1: rgba(188, 132, 75, 0.18);
+      --mood-glow-2: rgba(117, 103, 70, 0.14);
+      --mood-accent: #d6ad75;
+      --mood-accent-rgb: 214, 173, 117;
+      --mood-gold: #e6c48f;
     }
-    body[data-mood="gold"] {
-      --mood-glow-1: rgba(245, 158, 11, 0.32);
-      --mood-glow-2: rgba(249, 115, 22, 0.2);
-      --mood-accent: #fbbf24;
-      --mood-accent-rgb: 251, 191, 36;
-      --mood-gold: #fef08a;
-    }
-    body[data-mood="amber"] {
-      --mood-glow-1: rgba(225, 29, 72, 0.28);
-      --mood-glow-2: rgba(244, 63, 94, 0.22);
-      --mood-accent: #fb7185;
-      --mood-accent-rgb: 251, 113, 133;
-      --mood-gold: #fda4af;
+
+    body {
+      --bg-deep: #211811;
+      --bg-dark: #2a1e16;
+      --bg-surface: #36271d;
+      --bg-card: rgba(53, 39, 29, 0.88);
+      --bg-glass: rgba(35, 26, 19, 0.82);
+      --border-glass: rgba(218, 183, 139, 0.2);
+      --border-glass-bright: rgba(235, 206, 166, 0.38);
+      --border-glow: rgba(209, 157, 91, 0.42);
+      --blue: #d7a866;
+      --cyan: #e8cfaa;
+      --teal: #85916a;
+      --gold: #d4a15f;
+      --gold-light: #f0d4a6;
+      --text-bright: #fffaf3;
+      --text-primary: #f5ede2;
+      --text-muted: #c9b9a6;
+      --text-dim: #a38e78;
+      background-color: #211811;
+      background-image:
+        radial-gradient(ellipse at 18% 0%, rgba(181, 126, 70, 0.12), transparent 44%),
+        radial-gradient(ellipse at 85% 55%, rgba(105, 112, 73, 0.08), transparent 48%),
+        linear-gradient(180deg, #211811, #261c15 60%, #201811);
+      background-attachment: fixed;
+      color: #f5ede2;
     }
 
     /* Hero Section */
@@ -38,10 +51,9 @@
       gap: 32px;
       overflow: hidden;
       background: 
-        radial-gradient(circle at 75% 35%, var(--mood-glow-1), transparent 45%),
-        radial-gradient(circle at 45% 75%, var(--mood-glow-2), transparent 50%),
-        radial-gradient(circle at 10% 20%, rgba(91, 214, 255, 0.16), transparent 45%),
-        linear-gradient(135deg, #051329 0%, #071a38 50%, #0a254d 100%);
+        radial-gradient(ellipse at 76% 38%, var(--mood-glow-1), transparent 48%),
+        radial-gradient(ellipse at 20% 84%, var(--mood-glow-2), transparent 54%),
+        linear-gradient(125deg, #211811 0%, #302219 52%, #241b14 100%);
       transition: background 0.8s ease;
     }
 
@@ -50,7 +62,7 @@
       position: absolute;
       inset: auto 0 0;
       height: 40px;
-      background: linear-gradient(transparent, rgba(7, 23, 47, 0.85));
+      background: linear-gradient(transparent, rgba(29, 21, 15, 0.58));
       pointer-events: none;
       z-index: 2;
     }
@@ -67,9 +79,6 @@
       width: fit-content;
       max-width: 100%;
       margin: 0 0 30px;
-      perspective: 1000px;
-      transform-style: preserve-3d;
-      animation: brandFloat 6s ease-in-out infinite;
     }
 
     .hero-brand-mark {
@@ -79,12 +88,10 @@
       flex: 0 0 auto;
       width: clamp(68px, 8vw, 102px);
       aspect-ratio: 1;
-      border: 1px solid rgba(198, 255, 249, 0.62);
+      border: 1px solid rgba(241, 220, 187, 0.62);
       border-radius: 28%;
-      background: linear-gradient(145deg, #76fff0 0%, #18c9bd 48%, #0879aa 100%);
-      box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.55), 0 18px 36px rgba(0, 0, 0, 0.34), 0 0 38px rgba(91, 214, 255, 0.32);
-      transform: rotateX(12deg) rotateY(-16deg) translateZ(18px);
-      transform-style: preserve-3d;
+      background: linear-gradient(145deg, #f3dfbd 0%, #d7a866 100%);
+      box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.45), 0 18px 34px rgba(0, 0, 0, 0.3), 0 0 26px rgba(214, 173, 117, 0.16);
     }
 
     .hero-brand-mark::before {
@@ -93,41 +100,33 @@
       inset: 8px -2px -10px 8px;
       z-index: -1;
       border-radius: inherit;
-      background: linear-gradient(145deg, #117c9f, #07315b);
+      background: linear-gradient(145deg, #805335, #4a2d1f);
       box-shadow: 0 12px 18px rgba(0, 0, 0, 0.28);
-      transform: translateZ(-12px);
     }
 
-    .hero-brand-mark svg {
-      width: 68%;
-      height: 68%;
-      overflow: visible;
-      filter: drop-shadow(0 3px 3px rgba(0, 35, 54, 0.25));
-      transform: translateZ(12px);
+    .hero-brand-mark img {
+      display: block;
+      width: 88%;
+      height: 88%;
+      object-fit: contain;
     }
 
     .hero-brand h1 {
       white-space: nowrap;
-      font-size: clamp(48px, 6.8vw, 88px);
+      font-size: clamp(46px, 5.2vw, 72px);
       letter-spacing: -0.04em;
       line-height: 0.98;
       margin: 0;
       font-weight: 800;
       color: #ffffff;
-      text-shadow: 0 2px 0 #0c3455, 0 5px 0 #082544, 0 11px 22px rgba(0, 0, 0, 0.42);
-      transform: translateZ(28px) rotateY(-5deg);
+      text-shadow: 0 2px 0 #543a27, 0 5px 0 #3b291d, 0 11px 22px rgba(0, 0, 0, 0.36);
     }
 
     .hero-brand h1 span {
-      background: linear-gradient(120deg, #5bd6ff 0%, #8afff2 100%);
+      background: linear-gradient(120deg, #d5a35f 0%, #f0d5a7 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
-      text-shadow: 0 0 35px rgba(91, 214, 255, 0.35);
-    }
-
-    @keyframes brandFloat {
-      0%, 100% { transform: translateY(0) rotateX(0) rotateY(-2deg); }
-      50% { transform: translateY(-9px) rotateX(2deg) rotateY(2deg); }
+      text-shadow: 0 0 26px rgba(214, 173, 117, 0.22);
     }
 
     .hero-actions {
@@ -169,7 +168,16 @@
       position: relative;
       height: 520px;
       z-index: 2;
-      perspective: 1200px;
+      perspective: 1500px;
+    }
+
+    .scene-wrap::before {
+      content: "";
+      position: absolute;
+      inset: 8% 2%;
+      border-radius: 50%;
+      background: radial-gradient(ellipse, rgba(181, 126, 70, 0.13), transparent 68%);
+      pointer-events: none;
     }
 
     .scene {
@@ -178,102 +186,11 @@
       position: absolute;
       left: 50%;
       top: 50%;
-      transform: translate(-50%, -50%) rotateX(6deg) rotateY(-8deg);
+      transform: translate(-50%, -50%) rotateX(2deg) rotateY(-2deg);
       transform-style: preserve-3d;
-      transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
     }
 
-    /* 3D Glowing Orbs */
-    .orb {
-      position: absolute;
-      border-radius: 50%;
-      filter: blur(10px);
-      pointer-events: none;
-    }
-
-    .orb-one {
-      width: 380px;
-      height: 380px;
-      top: 40px;
-      left: 15%;
-      background: radial-gradient(circle, rgba(91, 214, 255, 0.25), transparent 70%);
-      box-shadow: 0 0 100px rgba(40, 140, 249, 0.45);
-      animation: pulseGlow 6s ease-in-out infinite;
-    }
-
-    .orb-two {
-      width: 260px;
-      height: 260px;
-      right: 0%;
-      top: 60px;
-      background: radial-gradient(circle, rgba(138, 255, 242, 0.2), transparent 70%);
-      animation: pulseGlow 5s -2.5s ease-in-out infinite;
-    }
-
-    /* Perspective Grid Floor with 3D Wave Roll */
-    .grid-floor {
-      position: absolute;
-      bottom: -10px;
-      left: -20%;
-      right: -20%;
-      height: 300px;
-      background: 
-        linear-gradient(rgba(var(--mood-accent-rgb, 117, 255, 240), 0.18) 1.5px, transparent 1.5px),
-        linear-gradient(90deg, rgba(var(--mood-accent-rgb, 117, 255, 240), 0.18) 1.5px, transparent 1.5px);
-      background-size: 42px 42px;
-      transform: perspective(320px) rotateX(68deg);
-      mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.95), transparent 85%);
-      -webkit-mask-image: linear-gradient(to top, rgba(0, 0, 0, 0.95), transparent 85%);
-      animation: waveRoll 10s linear infinite;
-      pointer-events: none;
-      transition: background 0.8s ease;
-    }
-
-    @keyframes waveRoll {
-      0% { background-position: 0 0; }
-      100% { background-position: 0 42px; }
-    }
-
-    /* 3D Holographic Concentric Orbitals */
-    .holo-stage {
-      position: absolute;
-      width: 360px;
-      height: 360px;
-      right: -20px;
-      bottom: 0px;
-      transform-style: preserve-3d;
-      transform: rotateX(65deg) translateZ(5px);
-      pointer-events: none;
-    }
-
-    .holo-ring {
-      position: absolute;
-      inset: 0;
-      border-radius: 50%;
-      border: 1.5px dashed rgba(var(--mood-accent-rgb, 117, 255, 240), 0.45);
-      box-shadow: 0 0 25px rgba(var(--mood-accent-rgb, 117, 255, 240), 0.25);
-      animation: holoSpin 22s linear infinite;
-    }
-
-    .holo-ring.ring-middle {
-      inset: 45px;
-      border: 1.5px solid rgba(243, 194, 113, 0.55);
-      box-shadow: 0 0 20px rgba(243, 194, 113, 0.2);
-      animation: holoSpin 16s linear infinite reverse;
-    }
-
-    .holo-ring.ring-core {
-      inset: 95px;
-      border: 2px dotted rgba(var(--mood-accent-rgb, 117, 255, 240), 0.7);
-      animation: holoSpin 9s linear infinite;
-    }
-
-    @keyframes holoSpin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-
-    /* Central 3D Dining Pass Card */
+    /* Warm, understated dining card */
     .dashboard-card {
       position: absolute;
       left: 30px;
@@ -281,11 +198,9 @@
       width: 400px;
       padding: 24px 26px;
       border-radius: var(--radius-xl);
-      background: rgba(8, 24, 48, 0.82);
-      backdrop-filter: blur(24px) saturate(180%);
-      -webkit-backdrop-filter: blur(24px) saturate(180%);
-      border: 1px solid rgba(138, 255, 242, 0.26);
-      box-shadow: 0 35px 75px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+      background: rgba(48, 35, 26, 0.96);
+      border: 1px solid rgba(218, 183, 139, 0.28);
+      box-shadow: 0 24px 52px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.08);
       transform: translateZ(55px);
       transition: border-color 0.4s ease, box-shadow 0.4s ease;
     }
@@ -294,7 +209,7 @@
       display: flex;
       align-items: center;
       gap: 9px;
-      color: #a8c9e6;
+      color: #c9b9a6;
     }
 
     .dash-top small {
@@ -315,13 +230,13 @@
       margin: 18px 0 16px;
       display: grid;
       gap: 4px;
-      color: #9cb5ce;
+      color: #c9b9a6;
       font-size: 12px;
     }
 
     .dash-greeting strong {
       font-size: 21px;
-      color: #ffffff;
+      color: #fffaf3;
       font-weight: 800;
       letter-spacing: -0.02em;
     }
@@ -335,13 +250,13 @@
     .dash-stats div {
       padding: 14px;
       border-radius: var(--radius-md);
-      background: rgba(4, 15, 30, 0.75);
-      border: 1px solid rgba(121, 202, 255, 0.15);
+      background: rgba(34, 25, 19, 0.8);
+      border: 1px solid rgba(218, 183, 139, 0.16);
     }
 
     .dash-stats small {
       display: block;
-      color: #8daac6;
+      color: #bba78f;
       font-size: 11px;
       margin-bottom: 4px;
     }
@@ -350,7 +265,7 @@
       display: block;
       margin: 2px 0 4px;
       font-size: 15px;
-      color: #ffffff;
+      color: #fffaf3;
       line-height: 1.3;
     }
 
@@ -360,73 +275,41 @@
       font-style: normal;
     }
 
-    /* 3D Atmosphere Mood Controller */
-    .mood-switcher {
+    .service-note {
       margin-top: 18px;
-      padding-top: 16px;
-      border-top: 1px solid rgba(121, 202, 255, 0.14);
+      padding-top: 14px;
+      border-top: 1px solid rgba(218, 183, 139, 0.16);
       display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .mood-header {
-      display: flex;
-      justify-content: space-between;
       align-items: center;
-      font: 600 10px var(--mono);
-      color: var(--cyan);
-      letter-spacing: 0.12em;
+      justify-content: space-between;
+      gap: 12px;
+      color: #c9b9a6;
+      font-size: 12px;
     }
 
-    .mood-pills {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 6px;
-    }
-
-    .btn-mood {
-      padding: 7px 6px;
-      border-radius: var(--radius-sm);
-      background: rgba(4, 15, 30, 0.85);
-      border: 1px solid rgba(121, 202, 255, 0.18);
-      color: #a0c2e2;
-      font: 600 10px var(--sans);
-      cursor: pointer;
-      transition: all 0.25s ease;
-      white-space: nowrap;
-      text-align: center;
-    }
-
-    .btn-mood:hover {
-      border-color: var(--mood-accent, #75fff0);
-      color: #ffffff;
-      background: rgba(var(--mood-accent-rgb, 117, 255, 240), 0.12);
-    }
-
-    .btn-mood.active {
-      background: rgba(var(--mood-accent-rgb, 117, 255, 240), 0.22);
-      border-color: var(--mood-accent, #75fff0);
-      color: #ffffff;
-      box-shadow: 0 0 12px rgba(var(--mood-accent-rgb, 117, 255, 240), 0.35);
+    .service-note strong {
+      color: var(--gold-light);
+      font-size: 12px;
+      font-weight: 700;
     }
 
     /* 3D Elevated Gourmet Platter Showcase */
     .hero-platter-3d {
       position: absolute;
-      right: -20px;
-      bottom: 25px;
-      width: 270px;
-      height: 270px;
+      right: -18px;
+      bottom: 28px;
+      width: 220px;
+      height: 220px;
       border-radius: 50%;
       transform-style: preserve-3d;
-      transform: translateZ(95px);
+      transform: translateZ(80px);
       transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
       animation: floatHero 6s ease-in-out infinite;
+      pointer-events: none;
     }
 
     .hero-platter-3d:hover {
-      transform: translateZ(115px) scale(1.06);
+      transform: translateZ(90px) scale(1.03);
     }
 
     .platter-dish {
@@ -435,11 +318,11 @@
       height: 100%;
       border-radius: 50%;
       overflow: hidden;
-      border: 3px solid rgba(243, 194, 113, 0.75);
-      box-shadow: 
-        0 0 0 10px rgba(var(--mood-accent-rgb, 117, 255, 240), 0.15),
-        0 30px 60px rgba(0, 0, 0, 0.8),
-        0 0 45px rgba(243, 194, 113, 0.3);
+      border: 3px solid rgba(226, 190, 139, 0.82);
+      box-shadow:
+        0 0 0 8px rgba(214, 173, 117, 0.1),
+        0 24px 48px rgba(0, 0, 0, 0.52),
+        0 0 28px rgba(226, 190, 139, 0.16);
     }
 
     .platter-dish img {
@@ -467,72 +350,19 @@
     }
 
     @keyframes floatHero {
-      0%, 100% { transform: translateZ(95px) translateY(0); }
-      50% { transform: translateZ(95px) translateY(-14px); }
-    }
-
-    /* 3D Floating Status Chips with Z-Depth */
-    .status-chip {
-      position: absolute;
-      padding: 12px 16px;
-      border-radius: var(--radius-md);
-      display: grid;
-      grid-template-columns: 8px auto;
-      gap: 2px 10px;
-      background: rgba(9, 26, 52, 0.88);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      border: 1px solid rgba(121, 202, 255, 0.28);
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.15);
-      animation: floatChip 5s ease-in-out infinite;
-    }
-
-    .status-chip i {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      grid-row: span 2;
-      align-self: center;
-    }
-
-    .status-chip span {
-      font: 600 9px var(--mono);
-      color: #9cbddc;
-      letter-spacing: 0.08em;
-    }
-
-    .status-chip b {
-      font-size: 13px;
-      color: #ffffff;
-    }
-
-    .chip-hero-1 {
-      top: 15px;
-      right: 15px;
-      transform: translateZ(125px);
-    }
-
-    .chip-hero-2 {
-      bottom: 120px;
-      left: 10px;
-      transform: translateZ(135px);
-      animation-delay: -2s;
-    }
-
-    @keyframes floatChip {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-8px); }
+      0%, 100% { transform: translateZ(80px) translateY(0); }
+      50% { transform: translateZ(80px) translateY(-6px); }
     }
 
     /* Ambience Showcase Section */
     .ambience-section {
       padding: 55px max(7vw, 32px) 45px;
       position: relative;
-      background: 
-        radial-gradient(circle at 15% 25%, rgba(6, 182, 212, 0.14), transparent 50%),
-        radial-gradient(circle at 85% 75%, rgba(243, 194, 113, 0.1), transparent 50%),
-        linear-gradient(180deg, #07172f 0%, #081d3a 50%, #0a254a 100%);
-      border-top: 1px solid rgba(121, 202, 255, 0.14);
+      background:
+        radial-gradient(ellipse at 15% 25%, rgba(138, 119, 80, 0.1), transparent 50%),
+        radial-gradient(ellipse at 85% 75%, rgba(183, 129, 72, 0.1), transparent 50%),
+        linear-gradient(180deg, #261c15 0%, #2b2018 50%, #261c15 100%);
+      border-top: 1px solid rgba(218, 183, 139, 0.14);
     }
 
     .ambience-grid {
@@ -571,7 +401,7 @@
     .ambience-card-overlay {
       position: absolute;
       inset: 0;
-      background: linear-gradient(180deg, transparent 40%, rgba(3, 8, 19, 0.92) 100%);
+      background: linear-gradient(180deg, transparent 35%, rgba(31, 23, 17, 0.94) 100%);
       padding: 36px;
       display: flex;
       flex-direction: column;
@@ -626,7 +456,7 @@
     .side-overlay {
       position: absolute;
       inset: 0;
-      background: linear-gradient(180deg, transparent 30%, rgba(3, 8, 19, 0.9) 100%);
+      background: linear-gradient(180deg, transparent 30%, rgba(31, 23, 17, 0.92) 100%);
       padding: 24px;
       display: flex;
       flex-direction: column;
@@ -659,7 +489,7 @@
 
     .section-head h2 span {
       color: var(--blue);
-      background: linear-gradient(120deg, #5bd6ff, #8afff2);
+      background: linear-gradient(120deg, #d7a866, #f0d4a6);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
@@ -698,9 +528,9 @@
       width: 44px;
       height: 44px;
       border-radius: var(--radius-sm);
-      background: rgba(91, 214, 255, 0.12);
-      border: 1px solid rgba(91, 214, 255, 0.28);
-      color: var(--cyan);
+      background: rgba(215, 168, 102, 0.12);
+      border: 1px solid rgba(215, 168, 102, 0.24);
+      color: var(--gold-light);
       display: grid;
       place-items: center;
       font-size: 20px;
@@ -723,12 +553,12 @@
     /* Chef's Signature Tasting & Specials ("The 3D Taste Vault") */
     .specials-section {
       padding: 55px max(7vw, 32px) 45px;
-      background: 
-        radial-gradient(circle at 85% 25%, rgba(243, 194, 113, 0.12), transparent 50%),
-        radial-gradient(circle at 15% 75%, rgba(6, 182, 212, 0.14), transparent 50%),
-        linear-gradient(180deg, #0a254a 0%, #0c2e5a 50%, #092244 100%);
+      background:
+        radial-gradient(ellipse at 85% 25%, rgba(183, 129, 72, 0.12), transparent 50%),
+        radial-gradient(ellipse at 15% 75%, rgba(111, 119, 79, 0.09), transparent 50%),
+        linear-gradient(180deg, #2b2018 0%, #30231a 50%, #281d16 100%);
       position: relative;
-      border-top: 1px solid rgba(121, 202, 255, 0.14);
+      border-top: 1px solid rgba(218, 183, 139, 0.14);
     }
 
     .specials-grid {
@@ -742,7 +572,7 @@
       position: relative;
       border-radius: var(--radius-xl);
       border: 1px solid var(--border-glass);
-      background: rgba(9, 23, 44, 0.72);
+      background: rgba(48, 35, 26, 0.86);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       overflow: hidden;
@@ -756,8 +586,8 @@
 
     .special-card:hover {
       transform: translateY(-10px) rotateX(4deg);
-      border-color: rgba(243, 194, 113, 0.45);
-      box-shadow: 0 30px 60px rgba(0, 0, 0, 0.65), 0 0 35px rgba(243, 194, 113, 0.15);
+      border-color: rgba(226, 190, 139, 0.42);
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.38), 0 0 24px rgba(226, 190, 139, 0.1);
     }
 
     /* Specular dynamic light glare sheen */
@@ -798,8 +628,8 @@
       position: absolute;
       top: 14px;
       left: 14px;
-      background: rgba(3, 8, 19, 0.88);
-      border: 1px solid rgba(243, 194, 113, 0.45);
+      background: rgba(38, 28, 21, 0.92);
+      border: 1px solid rgba(226, 190, 139, 0.36);
       color: var(--gold-light);
       font: 700 10px var(--mono);
       letter-spacing: 0.1em;
@@ -815,8 +645,8 @@
       position: absolute;
       bottom: 14px;
       right: 14px;
-      background: rgba(3, 8, 19, 0.92);
-      border: 1px solid rgba(91, 214, 255, 0.45);
+      background: rgba(38, 28, 21, 0.94);
+      border: 1px solid rgba(218, 183, 139, 0.28);
       color: #ffffff;
       font: 800 15px var(--sans);
       padding: 6px 14px;
@@ -856,7 +686,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-top: 1px solid rgba(121, 202, 255, 0.1);
+      border-top: 1px solid rgba(218, 183, 139, 0.14);
       padding-top: 16px;
       font: 600 11px var(--mono);
       color: var(--cyan);
@@ -866,11 +696,11 @@
     /* Guest Stories / Testimonials */
     .testimonials-section {
       padding: 50px max(7vw, 32px) 45px;
-      background: 
-        radial-gradient(circle at 50% 20%, rgba(91, 214, 255, 0.1), transparent 55%),
-        linear-gradient(180deg, #092244 0%, #071933 50%, #06162e 100%);
+      background:
+        radial-gradient(ellipse at 50% 20%, rgba(183, 129, 72, 0.09), transparent 55%),
+        linear-gradient(180deg, #281d16 0%, #251b14 50%, #211811 100%);
       position: relative;
-      border-top: 1px solid rgba(121, 202, 255, 0.12);
+      border-top: 1px solid rgba(218, 183, 139, 0.14);
     }
 
     .testimonial-grid {
@@ -883,7 +713,7 @@
     .testimonial-card {
       border-radius: var(--radius-xl);
       border: 1px solid var(--border-glass);
-      background: rgba(8, 22, 44, 0.78);
+      background: rgba(48, 35, 26, 0.88);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       padding: 28px 24px;
@@ -896,8 +726,8 @@
 
     .testimonial-card:hover {
       transform: translateY(-6px);
-      border-color: rgba(91, 214, 255, 0.4);
-      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.6), 0 0 25px rgba(91, 214, 255, 0.15);
+      border-color: rgba(218, 183, 139, 0.38);
+      box-shadow: 0 20px 42px rgba(0, 0, 0, 0.38), 0 0 22px rgba(209, 157, 91, 0.1);
     }
 
     .stars {
@@ -908,7 +738,7 @@
     }
 
     .quote-text {
-      color: #d1e2f6;
+      color: #e0d2c1;
       font-size: 14px;
       line-height: 1.7;
       font-style: italic;
@@ -919,7 +749,7 @@
       display: flex;
       align-items: center;
       gap: 14px;
-      border-top: 1px solid rgba(121, 202, 255, 0.1);
+      border-top: 1px solid rgba(218, 183, 139, 0.14);
       padding-top: 18px;
     }
 
@@ -946,20 +776,20 @@
     /* Closing CTA Card */
     .closing-section {
       padding: 35px max(7vw, 32px) 40px;
-      background: linear-gradient(180deg, #06162e 0%, #06152e 100%);
+      background: linear-gradient(180deg, #211811 0%, #1d1611 100%);
       position: relative;
-      border-top: 1px solid rgba(121, 202, 255, 0.12);
+      border-top: 1px solid rgba(218, 183, 139, 0.14);
     }
 
     .closing-card {
       padding: 44px max(5vw, 28px);
       border-radius: var(--radius-xl);
-      border: 1px solid rgba(121, 202, 255, 0.32);
-      background: 
-        radial-gradient(circle at 80% 50%, rgba(20, 184, 166, 0.26), transparent 50%),
-        radial-gradient(circle at 20% 50%, rgba(243, 194, 113, 0.15), transparent 50%),
-        linear-gradient(135deg, #082142 0%, #0e345e 100%);
-      box-shadow: 0 25px 65px rgba(0, 0, 0, 0.55), 0 0 40px rgba(6, 182, 212, 0.18);
+      border: 1px solid rgba(218, 183, 139, 0.28);
+      background:
+        radial-gradient(ellipse at 80% 50%, rgba(114, 121, 79, 0.13), transparent 50%),
+        radial-gradient(ellipse at 20% 50%, rgba(183, 129, 72, 0.12), transparent 50%),
+        linear-gradient(135deg, #33251b 0%, #2a1e16 100%);
+      box-shadow: 0 24px 54px rgba(0, 0, 0, 0.34);
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -1051,11 +881,6 @@
       }
     }
 
-    @media (prefers-reduced-motion: reduce) {
-      .hero-brand {
-        animation: none;
-      }
-    }
   </style>
 {% endblock %}
 
@@ -1065,11 +890,7 @@
     <div class="hero-copy">
       <div class="hero-brand">
         <span class="hero-brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="50" cy="50" r="37" stroke="white" stroke-width="4" opacity=".92"/>
-            <path d="M24 45c9-8 17-8 26 0s17 8 26 0" stroke="white" stroke-width="6" stroke-linecap="round"/>
-            <path d="M30 59c7-6 14-6 21 0s14 6 21 0" stroke="white" stroke-width="6" stroke-linecap="round" opacity=".82"/>
-          </svg>
+          <img src="{% static 'restaurant/images/food-waves-chef-logo.svg' %}" alt="">
         </span>
         <h1>Food <span>Waves</span></h1>
       </div>
@@ -1096,36 +917,11 @@
 
     <!-- 3D Interactive Perspective Scene -->
     <div class="scene-wrap">
-      <div class="orb orb-one"></div>
-      <div class="orb orb-two"></div>
-      <div class="grid-floor"></div>
-
       <div class="scene" id="scene">
-        <!-- 3D Concentric Hologram Orbitals -->
-        <div class="holo-stage">
-          <div class="holo-ring ring-outer"></div>
-          <div class="holo-ring ring-middle"></div>
-          <div class="holo-ring ring-core"></div>
-        </div>
-
-        <!-- Floating 3D Chips with Z-Depth -->
-        <div class="status-chip chip-hero-1">
-          <i style="background: #f3c271; box-shadow: 0 0 10px #f3c271;"></i>
-          <span>CHEF'S SIGNATURE</span>
-          <b>ROYAL GONGURA BIRYANI</b>
-        </div>
-
-        <div class="status-chip chip-hero-2">
-          <i style="background: #34d399; box-shadow: 0 0 10px #34d399;"></i>
-          <span>GUEST RATING</span>
-          <b>4.9 ★ (15K+ DINERS)</b>
-        </div>
-
-        <!-- 3D Central Glass Pass Card -->
         <div class="dashboard-card card-3d">
           <div class="dash-top">
             <span class="live-dot"></span>
-            <small>EXCLUSIVE DINING PASS</small>
+            <small>CHEF'S TABLE</small>
           </div>
 
           <div class="dash-greeting">
@@ -1142,20 +938,13 @@
             <div>
               <small>Atmosphere</small>
               <b>Candlelight Suites</b>
-              <em style="color: #8afff2;">Live Melodies</em>
+              <em style="color: var(--gold-light);">Live Melodies</em>
             </div>
           </div>
 
-          <div class="mood-switcher">
-            <div class="mood-header">
-              <span>INTERACTIVE LIGHTING ILLUSION</span>
-              <span id="mood-status" style="color: var(--gold-light); font-weight: 700;">Coastal Cyan</span>
-            </div>
-            <div class="mood-pills">
-              <button type="button" class="btn-mood active" data-mood="cyan">🌙 Ocean Cyan</button>
-              <button type="button" class="btn-mood" data-mood="gold">🌅 Sunset Gold</button>
-              <button type="button" class="btn-mood" data-mood="amber">🕯️ Candlelight</button>
-            </div>
+          <div class="service-note">
+            <span>Dining ambience</span>
+            <strong>Candlelit tableside service</strong>
           </div>
         </div>
 

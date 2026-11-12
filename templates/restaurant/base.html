@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="theme-color" content="#030813">
+    <meta name="theme-color" content="#211811">
 
     <title>{% block title %}Food Waves | Modern Hospitality &amp; Dining{% endblock %}</title>
 
@@ -16,23 +16,23 @@
     <!-- Critical Luxury Base Styles (Guarantees zero FOUC and pristine styling across mobile & desktop) -->
     <style id="critical-base-css">
       :root {
-        --bg-deep: #051329;
-        --bg-dark: #071936;
-        --bg-surface: #0a2144;
-        --bg-card: rgba(11, 33, 64, 0.78);
-        --bg-glass: rgba(8, 25, 50, 0.7);
-        --border-glass: rgba(121, 202, 255, 0.18);
-        --border-glass-bright: rgba(138, 255, 242, 0.32);
-        --border-glow: rgba(91, 214, 255, 0.45);
-        --blue: #5bd6ff;
-        --cyan: #8afff2;
-        --teal: #14b8a6;
-        --gold: #f3c271;
-        --gold-light: #ffd89b;
-        --text-bright: #ffffff;
-        --text-primary: #eff7ff;
-        --text-muted: #9cb5ce;
-        --text-dim: #6784a3;
+        --bg-deep: #211811;
+        --bg-dark: #2a1e16;
+        --bg-surface: #36271d;
+        --bg-card: rgba(53, 39, 29, 0.88);
+        --bg-glass: rgba(35, 26, 19, 0.82);
+        --border-glass: rgba(218, 183, 139, 0.2);
+        --border-glass-bright: rgba(235, 206, 166, 0.38);
+        --border-glow: rgba(209, 157, 91, 0.48);
+        --blue: #d7a866;
+        --cyan: #e8cfaa;
+        --teal: #85916a;
+        --gold: #d4a15f;
+        --gold-light: #f0d4a6;
+        --text-bright: #fffaf3;
+        --text-primary: #f5ede2;
+        --text-muted: #c9b9a6;
+        --text-dim: #a38e78;
         --mono: "DM Mono", monospace;
         --sans: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         --serif: "Playfair Display", Georgia, serif;
@@ -51,13 +51,13 @@
 
       body {
         margin: 0;
-        background-color: #051329;
+        background-color: #211811;
         background-image: 
-          radial-gradient(circle at 15% 15%, rgba(91, 214, 255, 0.12), transparent 45%),
-          radial-gradient(circle at 85% 55%, rgba(20, 184, 166, 0.1), transparent 45%),
-          radial-gradient(circle at 50% 85%, rgba(243, 194, 113, 0.08), transparent 45%);
+          radial-gradient(circle at 15% 15%, rgba(184, 127, 69, 0.12), transparent 45%),
+          radial-gradient(circle at 85% 55%, rgba(108, 116, 77, 0.1), transparent 45%),
+          radial-gradient(circle at 50% 85%, rgba(243, 194, 113, 0.06), transparent 45%);
         background-attachment: fixed;
-        color: #eff7ff;
+        color: #f5ede2;
         font-family: var(--sans);
         overflow-x: hidden;
         -webkit-font-smoothing: antialiased;
@@ -76,21 +76,21 @@
         gap: 10px;
         padding: 13px 24px;
         border-radius: 14px;
-        background: linear-gradient(135deg, #4ad3ff 0%, #7dffef 100%);
-        color: #021424 !important;
+        background: linear-gradient(135deg, #d2a15e 0%, #f1d4a3 100%);
+        color: #26190f !important;
         text-decoration: none !important;
         font-size: 14px;
         font-weight: 800;
         letter-spacing: 0.02em;
         border: 0;
         cursor: pointer;
-        box-shadow: 0 0 35px rgba(74, 211, 255, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+        box-shadow: 0 8px 24px rgba(123, 78, 35, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.4);
         transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.2s ease;
       }
 
       .button:hover, .btn-primary:hover {
         transform: translateY(-2px);
-        box-shadow: 0 10px 40px rgba(74, 211, 255, 0.5);
+        box-shadow: 0 10px 30px rgba(123, 78, 35, 0.34);
       }
 
       .button-gold {
@@ -104,17 +104,17 @@
       }
 
       .button-outline {
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px solid rgba(121, 202, 255, 0.24);
-        color: #eff7ff !important;
+        background: rgba(255, 248, 238, 0.04);
+        border: 1px solid rgba(218, 183, 139, 0.3);
+        color: #f5ede2 !important;
         box-shadow: none;
       }
 
       .button-outline:hover {
-        background: rgba(255, 255, 255, 0.1);
-        border-color: #5bd6ff;
-        color: #ffffff !important;
-        box-shadow: 0 0 24px rgba(91, 214, 255, 0.2);
+        background: rgba(255, 248, 238, 0.1);
+        border-color: #d7a866;
+        color: #fffaf3 !important;
+        box-shadow: 0 0 20px rgba(209, 157, 91, 0.16);
       }
 
       .button-small {
@@ -136,20 +136,20 @@
         align-items: center;
         justify-content: space-between;
         padding: 0 20px 0 24px;
-        border: 1px solid rgba(121, 202, 255, 0.16);
+        border: 1px solid rgba(218, 183, 139, 0.2);
         border-radius: 16px;
-        background: rgba(4, 13, 27, 0.72);
+        background: rgba(35, 26, 19, 0.9);
         backdrop-filter: blur(18px);
         -webkit-backdrop-filter: blur(18px);
-        box-shadow: 0 10px 35px rgba(0, 0, 0, 0.45);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
         transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
       }
 
       .site-header.scrolled {
         top: 8px;
-        background: rgba(4, 13, 27, 0.92);
-        border-color: rgba(91, 214, 255, 0.32);
-        box-shadow: 0 16px 45px rgba(0, 0, 0, 0.6), 0 0 30px rgba(91, 214, 255, 0.14);
+        background: rgba(35, 26, 19, 0.97);
+        border-color: rgba(218, 183, 139, 0.28);
+        box-shadow: 0 14px 36px rgba(0, 0, 0, 0.36);
       }
 
       .logo {
@@ -170,37 +170,28 @@
         height: 34px;
         margin-right: 10px;
         border-radius: 11px;
-        background: linear-gradient(145deg, #5bd6ff, #14b8a6);
-        box-shadow: 0 5px 18px rgba(20, 184, 166, 0.35);
-        transform-style: preserve-3d;
-        transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+        background: linear-gradient(145deg, #e0b777, #a9673c);
+        box-shadow: 0 5px 16px rgba(123, 78, 35, 0.3);
+        transform: none;
+        transition: none;
       }
 
       .logo:hover .logo-mark {
-        transform: perspective(350px) rotateY(-16deg) rotateX(10deg) translateY(-2px);
+        transform: none;
       }
 
-      .logo-mark svg {
-        width: 22px;
-        height: 22px;
+      .logo-mark img {
+        display: block;
+        width: 30px;
+        height: 30px;
       }
 
       .logo b {
-        color: #5bd6ff;
-        background: linear-gradient(120deg, #5bd6ff, #8afff2);
+        color: #d7a866;
+        background: linear-gradient(120deg, #d7a866, #f0d4a6);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         margin-left: 2px;
-      }
-
-      @media (prefers-reduced-motion: reduce) {
-        .logo-mark {
-          transition: none;
-        }
-
-        .logo:hover .logo-mark {
-          transform: none;
-        }
       }
 
       .site-header nav {
@@ -211,7 +202,7 @@
 
       .site-header nav a {
         position: relative;
-        color: #9cb5ce;
+        color: #c9b9a6;
         text-decoration: none;
         font-size: 13px;
         font-weight: 600;
@@ -221,7 +212,7 @@
 
       .site-header nav a:hover,
       .site-header nav a.active {
-        color: #ffffff;
+        color: #fffaf3;
       }
 
       .site-header nav a::after {
@@ -231,7 +222,7 @@
         left: 0;
         width: 0;
         height: 2px;
-        background: linear-gradient(90deg, #5bd6ff, #8afff2);
+        background: linear-gradient(90deg, #d7a866, #f0d4a6);
         border-radius: 2px;
         transition: width 0.25s ease;
       }
@@ -248,7 +239,7 @@
       }
 
       .nav-actions .login {
-        color: #9cb5ce;
+        color: #c9b9a6;
         text-decoration: none;
         font-size: 13px;
         font-weight: 600;
@@ -258,7 +249,7 @@
       }
 
       .nav-actions .login:hover {
-        color: #ffffff;
+        color: #fffaf3;
         background: rgba(255, 255, 255, 0.05);
       }
 
@@ -268,9 +259,9 @@
         gap: 10px;
         padding: 4px 12px 4px 4px;
         border-radius: 30px;
-        background: rgba(13, 35, 66, 0.7);
-        border: 1px solid rgba(91, 214, 255, 0.2);
-        color: #9cb5ce;
+        background: rgba(53, 39, 29, 0.84);
+        border: 1px solid rgba(218, 183, 139, 0.2);
+        color: #c9b9a6;
         font-size: 12px;
         font-weight: 600;
       }
@@ -279,8 +270,8 @@
         width: 28px;
         height: 28px;
         border-radius: 50%;
-        background: linear-gradient(135deg, #1d7a90 0%, #5bd6ff 100%);
-        color: #031426;
+        background: linear-gradient(135deg, #a9673c 0%, #e0b777 100%);
+        color: #26190f;
         display: grid;
         place-items: center;
         font-size: 11px;
@@ -312,8 +303,8 @@
       .mobile-toggle {
         display: none;
         background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(121, 202, 255, 0.25);
-        color: #8afff2;
+        border: 1px solid rgba(218, 183, 139, 0.25);
+        color: #e8cfaa;
         cursor: pointer;
         padding: 8px 12px;
         font-size: 18px;
@@ -323,17 +314,17 @@
       }
 
       .mobile-toggle:hover {
-        background: rgba(91, 214, 255, 0.15);
-        border-color: #5bd6ff;
-        color: #ffffff;
-        box-shadow: 0 0 15px rgba(91, 214, 255, 0.35);
+        background: rgba(215, 168, 102, 0.14);
+        border-color: #d7a866;
+        color: #fffaf3;
+        box-shadow: 0 0 15px rgba(209, 157, 91, 0.18);
       }
 
       /* Mobile Drawer (Strictly concealed off-screen by default) */
       .drawer-overlay {
         position: fixed;
         inset: 0;
-        background: rgba(1, 4, 10, 0.78);
+        background: rgba(20, 15, 11, 0.78);
         backdrop-filter: blur(8px);
         -webkit-backdrop-filter: blur(8px);
         z-index: 99998;
@@ -353,10 +344,10 @@
         right: -100% !important;
         width: min(340px, 86vw) !important;
         height: 100vh !important;
-        background: rgba(4, 12, 26, 0.98) !important;
+        background: rgba(35, 26, 19, 0.98) !important;
         backdrop-filter: blur(28px) !important;
         -webkit-backdrop-filter: blur(28px) !important;
-        border-left: 1px solid rgba(121, 202, 255, 0.2) !important;
+        border-left: 1px solid rgba(218, 183, 139, 0.2) !important;
         z-index: 99999 !important;
         display: flex !important;
         flex-direction: column !important;
@@ -377,7 +368,7 @@
         justify-content: space-between;
         margin-bottom: 24px;
         padding-bottom: 16px;
-        border-bottom: 1px solid rgba(121, 202, 255, 0.12);
+        border-bottom: 1px solid rgba(218, 183, 139, 0.16);
       }
 
       .drawer-close {
@@ -417,8 +408,8 @@
         padding: 13px 16px;
         border-radius: 12px;
         background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(121, 202, 255, 0.08);
-        color: #eff7ff;
+        border: 1px solid rgba(218, 183, 139, 0.12);
+        color: #f5ede2;
         font-size: 14px;
         font-weight: 600;
         text-decoration: none;
@@ -426,15 +417,15 @@
       }
 
       .drawer-nav a span {
-        color: #5bd6ff;
+        color: #d7a866;
         font-size: 15px;
         transition: transform 0.2s ease;
       }
 
       .drawer-nav a:hover {
-        background: rgba(91, 214, 255, 0.12);
-        border-color: rgba(91, 214, 255, 0.35);
-        color: #ffffff;
+        background: rgba(215, 168, 102, 0.1);
+        border-color: rgba(215, 168, 102, 0.3);
+        color: #fffaf3;
         transform: translateX(3px);
       }
 
@@ -445,11 +436,11 @@
       /* Luxury Multi-Column Footer */
       .site-footer {
         position: relative;
-        background: linear-gradient(180deg, #06152e 0%, #040e20 100%);
-        border-top: 1px solid rgba(121, 202, 255, 0.2);
+        background: linear-gradient(180deg, #261c15 0%, #1d1611 100%);
+        border-top: 1px solid rgba(218, 183, 139, 0.18);
         padding: 60px max(7vw, 24px) 32px;
         margin-top: 0;
-        color: #9cb5ce;
+        color: #c9b9a6;
         font-size: 13px;
       }
 
@@ -459,7 +450,7 @@
         left: 8%;
         right: 8%;
         height: 1px;
-        background: linear-gradient(90deg, transparent, rgba(91, 214, 255, 0.6), rgba(243, 194, 113, 0.6), transparent);
+        background: linear-gradient(90deg, transparent, rgba(209, 157, 91, 0.5), rgba(226, 190, 139, 0.5), transparent);
       }
 
       .footer-grid {
@@ -495,14 +486,14 @@
       }
 
       .footer-col a {
-        color: #9cb5ce;
+        color: #c9b9a6;
         text-decoration: none;
         transition: all 0.2s ease;
         font-size: 13px;
       }
 
       .footer-col a:hover {
-        color: #8afff2;
+        color: #e8cfaa;
         transform: translateX(2px);
       }
 
@@ -525,7 +516,7 @@
         align-items: center;
         gap: 8px;
         font: 600 11px var(--mono);
-        color: #8afff2;
+        color: #e8cfaa;
       }
 
       .pulse-dot {
@@ -603,10 +594,10 @@
         border-radius: 12px;
         font-size: 13px;
         font-weight: 600;
-        background: rgba(9, 24, 48, 0.94);
-        border: 1px solid rgba(91, 214, 255, 0.3);
+        background: rgba(35, 26, 19, 0.96);
+        border: 1px solid rgba(218, 183, 139, 0.28);
         box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        color: #eff7ff;
+        color: #f5ede2;
       }
 
       .alert-success { border-color: rgba(52, 211, 153, 0.4); color: #34d399; }
@@ -644,11 +635,7 @@
     <header class="site-header" id="site-header">
       <a class="logo" href="{% url 'restaurant:home' %}">
         <span class="logo-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="12" cy="12" r="9" stroke="white" stroke-width="1.5" opacity=".8"/>
-            <path d="M5.5 11c2-1.8 3.7-1.8 5.7 0s3.7 1.8 5.7 0" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
-            <path d="M7 14.5c1.7-1.3 3.3-1.3 5 0s3.3 1.3 5 0" stroke="white" stroke-width="1.8" stroke-linecap="round" opacity=".8"/>
-          </svg>
+          <img src="{% static 'restaurant/images/food-waves-chef-logo.svg' %}" alt="">
         </span>
         FOOD <b>WAVES</b>
       </a>
@@ -707,11 +694,7 @@
       <div class="drawer-top">
         <a class="logo" href="{% url 'restaurant:home' %}">
           <span class="logo-mark" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="12" cy="12" r="9" stroke="white" stroke-width="1.5" opacity=".8"/>
-              <path d="M5.5 11c2-1.8 3.7-1.8 5.7 0s3.7 1.8 5.7 0" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
-              <path d="M7 14.5c1.7-1.3 3.3-1.3 5 0s3.3 1.3 5 0" stroke="white" stroke-width="1.8" stroke-linecap="round" opacity=".8"/>
-            </svg>
+            <img src="{% static 'restaurant/images/food-waves-chef-logo.svg' %}" alt="">
           </span>
           FOOD <b>WAVES</b>
         </a>
@@ -763,11 +746,7 @@
         <div class="footer-col">
           <a class="logo" href="{% url 'restaurant:home' %}" style="margin-bottom: 18px; display: inline-flex;">
             <span class="logo-mark" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="12" cy="12" r="9" stroke="white" stroke-width="1.5" opacity=".8"/>
-                <path d="M5.5 11c2-1.8 3.7-1.8 5.7 0s3.7 1.8 5.7 0" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
-                <path d="M7 14.5c1.7-1.3 3.3-1.3 5 0s3.3 1.3 5 0" stroke="white" stroke-width="1.8" stroke-linecap="round" opacity=".8"/>
-              </svg>
+              <img src="{% static 'restaurant/images/food-waves-chef-logo.svg' %}" alt="">
             </span>
             FOOD <b>WAVES</b>
           </a>

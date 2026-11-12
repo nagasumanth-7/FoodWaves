@@ -1,28 +1,7 @@
 (() => {
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // 1. Atmosphere 3D Mood Lighting Controller
-  const moodButtons = document.querySelectorAll('.btn-mood');
-  const moodStatus = document.getElementById('mood-status');
-  const moodNames = {
-    cyan: 'Coastal Cyan',
-    gold: 'Sunset Gold',
-    amber: 'Candlelight Amber',
-  };
-
-  moodButtons.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const mood = btn.dataset.mood;
-      moodButtons.forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      document.body.setAttribute('data-mood', mood);
-      if (moodStatus && moodNames[mood]) {
-        moodStatus.textContent = moodNames[mood];
-      }
-    });
-  });
-
-  // 2. 3D Hero Perspective Mouse & Parallax Tracking
+  // 1. Subtle hero depth and parallax
   const scene = document.querySelector('#scene');
   const wrap = document.querySelector('.scene-wrap');
   const heroPlatter = document.querySelector('.hero-platter-3d');
@@ -59,20 +38,20 @@
       currentX += (mouseX - currentX) * 0.08;
       currentY += (mouseY - currentY) * 0.08;
 
-      const rotX = 6 - currentY * 18;
-      const rotY = -8 + currentX * 24;
+      const rotX = 2 - currentY * 6;
+      const rotY = -2 + currentX * 8;
 
       scene.style.transform = `translate(-50%, -50%) rotateX(${rotX}deg) rotateY(${rotY}deg)`;
 
       // Multi-layer depth parallax
       if (heroPlatter) {
-        const pX = currentX * 26;
-        const pY = currentY * 26;
-        heroPlatter.style.transform = `translateZ(95px) translate(${pX}px, ${pY}px)`;
+        const pX = currentX * 12;
+        const pY = currentY * 12;
+        heroPlatter.style.transform = `translateZ(80px) translate(${pX}px, ${pY}px)`;
       }
       if (dashCard) {
-        const cX = -currentX * 12;
-        const cY = -currentY * 12;
+        const cX = -currentX * 5;
+        const cY = -currentY * 5;
         dashCard.style.transform = `translateZ(55px) translate(${cX}px, ${cY}px)`;
       }
 
@@ -82,7 +61,7 @@
     requestAnimationFrame(animateScene);
   }
 
-  // 3. Interactive 3D Card Tilt with Specular Glare Sheen
+  // 2. Restrained card hover depth
   const cards = document.querySelectorAll('.card-3d');
   if (!reduced && window.matchMedia('(min-width: 768px)').matches) {
     cards.forEach((card) => {
@@ -93,10 +72,10 @@
         const x = (e.clientX - rect.left) / rect.width;
         const y = (e.clientY - rect.top) / rect.height;
 
-        const tiltX = (0.5 - y) * 16;
-        const tiltY = (x - 0.5) * 16;
+        const tiltX = (0.5 - y) * 6;
+        const tiltY = (x - 0.5) * 6;
 
-        card.style.transform = `perspective(1000px) translateY(-8px) rotateX(${tiltX}deg) rotateY(${tiltY}deg)`;
+        card.style.transform = `perspective(1000px) translateY(-4px) rotateX(${tiltX}deg) rotateY(${tiltY}deg)`;
 
         if (glare) {
           glare.style.background = `radial-gradient(circle at ${x * 100}% ${y * 100}%, rgba(255, 255, 255, 0.22) 0%, transparent 60%)`;
@@ -113,7 +92,7 @@
     });
   }
 
-  // 4. GSAP Scroll Animations
+  // 3. GSAP Scroll Animations
   if (!window.gsap || reduced) return;
   if (window.ScrollTrigger) gsap.registerPlugin(ScrollTrigger);
 
