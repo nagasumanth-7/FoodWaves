@@ -60,59 +60,74 @@
       z-index: 3;
       max-width: 620px;
     }
-
-    .hero-kicker {
-      display: inline-flex;
+    .hero-brand {
+      display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 5px 12px;
-      border-radius: 30px;
-      background: rgba(91, 214, 255, 0.08);
-      border: 1px solid rgba(91, 214, 255, 0.25);
-      color: var(--cyan);
-      font: 600 11px var(--mono);
-      letter-spacing: 0.14em;
-      margin-bottom: 16px;
+      gap: clamp(14px, 2vw, 24px);
+      width: fit-content;
+      max-width: 100%;
+      margin: 0 0 30px;
+      perspective: 1000px;
+      transform-style: preserve-3d;
+      animation: brandFloat 6s ease-in-out infinite;
     }
 
-    .hero-kicker i {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--cyan);
-      box-shadow: 0 0 10px var(--cyan);
-      display: inline-block;
+    .hero-brand-mark {
+      position: relative;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: clamp(68px, 8vw, 102px);
+      aspect-ratio: 1;
+      border: 1px solid rgba(198, 255, 249, 0.62);
+      border-radius: 28%;
+      background: linear-gradient(145deg, #76fff0 0%, #18c9bd 48%, #0879aa 100%);
+      box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.55), 0 18px 36px rgba(0, 0, 0, 0.34), 0 0 38px rgba(91, 214, 255, 0.32);
+      transform: rotateX(12deg) rotateY(-16deg) translateZ(18px);
+      transform-style: preserve-3d;
     }
 
-    .hero h1 {
-      font-size: clamp(44px, 5.2vw, 76px);
+    .hero-brand-mark::before {
+      content: "";
+      position: absolute;
+      inset: 8px -2px -10px 8px;
+      z-index: -1;
+      border-radius: inherit;
+      background: linear-gradient(145deg, #117c9f, #07315b);
+      box-shadow: 0 12px 18px rgba(0, 0, 0, 0.28);
+      transform: translateZ(-12px);
+    }
+
+    .hero-brand-mark svg {
+      width: 68%;
+      height: 68%;
+      overflow: visible;
+      filter: drop-shadow(0 3px 3px rgba(0, 35, 54, 0.25));
+      transform: translateZ(12px);
+    }
+
+    .hero-brand h1 {
+      white-space: nowrap;
+      font-size: clamp(48px, 6.8vw, 88px);
       letter-spacing: -0.04em;
       line-height: 0.98;
       margin: 0;
       font-weight: 800;
       color: #ffffff;
+      text-shadow: 0 2px 0 #0c3455, 0 5px 0 #082544, 0 11px 22px rgba(0, 0, 0, 0.42);
+      transform: translateZ(28px) rotateY(-5deg);
     }
 
-    .hero h1 span {
+    .hero-brand h1 span {
       background: linear-gradient(120deg, #5bd6ff 0%, #8afff2 100%);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
       text-shadow: 0 0 35px rgba(91, 214, 255, 0.35);
     }
 
-    .hero h1 em {
-      color: var(--gold);
-      font-family: var(--serif);
-      font-style: italic;
-      font-weight: 400;
-    }
-
-    .hero-lede {
-      max-width: 520px;
-      color: var(--text-muted);
-      font-size: 15px;
-      line-height: 1.7;
-      margin: 18px 0 24px;
+    @keyframes brandFloat {
+      0%, 100% { transform: translateY(0) rotateX(0) rotateY(-2deg); }
+      50% { transform: translateY(-9px) rotateX(2deg) rotateY(2deg); }
     }
 
     .hero-actions {
@@ -989,13 +1004,16 @@
         padding: 95px 18px 45px;
         min-height: auto;
       }
-      .hero h1 {
-        font-size: 38px;
-        line-height: 1.08;
+      .hero-brand {
+        gap: 12px;
+        margin-bottom: 26px;
       }
-      .hero-lede {
-        font-size: 14px;
-        margin: 16px 0 22px;
+      .hero-brand-mark {
+        width: 58px;
+      }
+      .hero-brand h1 {
+        font-size: clamp(36px, 9.5vw, 52px);
+        line-height: 1.05;
       }
       .hero-actions {
         flex-direction: column;
@@ -1032,6 +1050,12 @@
         padding: 32px 20px;
       }
     }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hero-brand {
+        animation: none;
+      }
+    }
   </style>
 {% endblock %}
 
@@ -1039,20 +1063,16 @@
   <!-- 3D Hero Section -->
   <section class="hero" id="home">
     <div class="hero-copy">
-      <div class="hero-kicker">
-        <i></i>
-        <span>MODERN RESTAURANT OS &amp; CULINARY DINING</span>
+      <div class="hero-brand">
+        <span class="hero-brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="50" cy="50" r="37" stroke="white" stroke-width="4" opacity=".92"/>
+            <path d="M24 45c9-8 17-8 26 0s17 8 26 0" stroke="white" stroke-width="6" stroke-linecap="round"/>
+            <path d="M30 59c7-6 14-6 21 0s14 6 21 0" stroke="white" stroke-width="6" stroke-linecap="round" opacity=".82"/>
+          </svg>
+        </span>
+        <h1>Food <span>Waves</span></h1>
       </div>
-
-      <h1>
-        Food moves.<br>
-        <span>So should you.</span><br>
-        <em>in every rhythm.</em>
-      </h1>
-
-      <p class="hero-lede">
-        An immersive dining destination powered by modern restaurant intelligence. Pre-book your table in seconds, explore our artisanal coastal menu, and experience Telugu hospitality at its finest.
-      </p>
 
       <div class="hero-actions">
         <a class="button button-gold" href="{% url 'restaurant:reservation' %}">

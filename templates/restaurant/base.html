@@ -162,6 +162,29 @@
         letter-spacing: 1.8px;
       }
 
+      .logo-mark {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        margin-right: 10px;
+        border-radius: 11px;
+        background: linear-gradient(145deg, #5bd6ff, #14b8a6);
+        box-shadow: 0 5px 18px rgba(20, 184, 166, 0.35);
+        transform-style: preserve-3d;
+        transition: transform 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+
+      .logo:hover .logo-mark {
+        transform: perspective(350px) rotateY(-16deg) rotateX(10deg) translateY(-2px);
+      }
+
+      .logo-mark svg {
+        width: 22px;
+        height: 22px;
+      }
+
       .logo b {
         color: #5bd6ff;
         background: linear-gradient(120deg, #5bd6ff, #8afff2);
@@ -170,14 +193,14 @@
         margin-left: 2px;
       }
 
-      .logo-mark {
-        font-size: 24px;
-        line-height: 0;
-        color: #8afff2;
-        vertical-align: -2px;
-        margin-right: 8px;
-        text-shadow: 0 0 16px rgba(138, 255, 242, 0.7);
-        display: inline-block;
+      @media (prefers-reduced-motion: reduce) {
+        .logo-mark {
+          transition: none;
+        }
+
+        .logo:hover .logo-mark {
+          transform: none;
+        }
       }
 
       .site-header nav {
@@ -620,7 +643,13 @@
     <!-- Sticky Glass Navigation -->
     <header class="site-header" id="site-header">
       <a class="logo" href="{% url 'restaurant:home' %}">
-        <span class="logo-mark">≈</span>
+        <span class="logo-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="12" cy="12" r="9" stroke="white" stroke-width="1.5" opacity=".8"/>
+            <path d="M5.5 11c2-1.8 3.7-1.8 5.7 0s3.7 1.8 5.7 0" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+            <path d="M7 14.5c1.7-1.3 3.3-1.3 5 0s3.3 1.3 5 0" stroke="white" stroke-width="1.8" stroke-linecap="round" opacity=".8"/>
+          </svg>
+        </span>
         FOOD <b>WAVES</b>
       </a>
 
@@ -677,7 +706,13 @@
     <aside class="mobile-drawer" id="mobileDrawer">
       <div class="drawer-top">
         <a class="logo" href="{% url 'restaurant:home' %}">
-          <span class="logo-mark">≈</span>
+          <span class="logo-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="12" cy="12" r="9" stroke="white" stroke-width="1.5" opacity=".8"/>
+              <path d="M5.5 11c2-1.8 3.7-1.8 5.7 0s3.7 1.8 5.7 0" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+              <path d="M7 14.5c1.7-1.3 3.3-1.3 5 0s3.3 1.3 5 0" stroke="white" stroke-width="1.8" stroke-linecap="round" opacity=".8"/>
+            </svg>
+          </span>
           FOOD <b>WAVES</b>
         </a>
         <button class="drawer-close" id="drawerClose" aria-label="Close menu">&times;</button>
@@ -727,7 +762,13 @@
       <div class="footer-grid">
         <div class="footer-col">
           <a class="logo" href="{% url 'restaurant:home' %}" style="margin-bottom: 18px; display: inline-flex;">
-            <span class="logo-mark">≈</span>
+            <span class="logo-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="9" stroke="white" stroke-width="1.5" opacity=".8"/>
+                <path d="M5.5 11c2-1.8 3.7-1.8 5.7 0s3.7 1.8 5.7 0" stroke="white" stroke-width="1.8" stroke-linecap="round"/>
+                <path d="M7 14.5c1.7-1.3 3.3-1.3 5 0s3.3 1.3 5 0" stroke="white" stroke-width="1.8" stroke-linecap="round" opacity=".8"/>
+              </svg>
+            </span>
             FOOD <b>WAVES</b>
           </a>
           <p>
